@@ -80,6 +80,8 @@ def main() -> int:
         subprocess.run(
             ["npx", "-y", "skills@latest", "add", f["repo"], "-y", "-s", "*", "-a", "claude-code"],
             cwd=into, check=True, stdin=subprocess.DEVNULL, shell=os.name == "nt",
+            # stdout は最後のサマリ専用。npx の TUI 出力を混ぜない
+            stdout=sys.stderr,
         )
         src = into / ".claude" / "skills"
         got = sorted(p.name for p in src.iterdir() if p.is_dir()) if src.is_dir() else []
@@ -88,7 +90,8 @@ def main() -> int:
             return 1
 
         if not f["description"]:
-            print(f"::warning::{f['repo']} に description が無い。marketplace の説明が空になる")
+            print(f"::warning::{f['repo']} に description が無い。marketplace の説明が空になる",
+                  file=sys.stderr)
         plugin = f["repo"].split("/")[1]
         dest = staged / "plugins" / plugin
         shutil.copytree(src, dest / "skills")

@@ -11,7 +11,7 @@
     {
       "name": "claat",
       "source": "./plugins/claat",
-      "description": ""
+      "description": "claat 形式の手順書を lint して Google Codelabs の HTML にする Go CLI と skill"
     },
     {
       "name": "html-deck",

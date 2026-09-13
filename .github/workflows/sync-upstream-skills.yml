@@ -64,9 +64,17 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/upstream"
           cd "$RUNNER_TEMP/upstream"
-          cut -f1 "$RUNNER_TEMP/found.tsv" | sort -u | while read -r repo; do
+          # while read に流し込むと npx が残りの行を stdin から吸うので for で回す
+          for repo in $(cut -f1 "$RUNNER_TEMP/found.tsv" | sort -u); do
             npx -y skills@latest add "$repo" -y -s '*' -a claude-code
           done
+          # 取り逃しがあると skills/ から黙って消えるので、件数で突き合わせる
+          want=$(wc -l < "$RUNNER_TEMP/found.tsv")
+          got=$(find "$RUNNER_TEMP/upstream/.claude/skills" -mindepth 1 -maxdepth 1 -type d | wc -l)
+          if [ "$want" -ne "$got" ]; then
+            echo "::error::見つけた skill は $want 件だが $got 件しか取得できていない"
+            exit 1
+          fi
 
       - name: skills/ を配布元の内容でまるごと置き換える
         run: |

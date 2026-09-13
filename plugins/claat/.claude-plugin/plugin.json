@@ -1,0 +1,10 @@
+{
+  "name": "claat",
+  "description": "",
+  "author": {
+    "name": "nogikun",
+    "url": "https://github.com/nogikun"
+  },
+  "repository": "https://github.com/nogikun/claat",
+  "skills": "./skills/"
+}

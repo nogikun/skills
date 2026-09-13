@@ -9,10 +9,19 @@
   },
   "plugins": [
     {
-      "name": "nogikun-skills",
-      "source": "./",
-      "description": "手順書 (claat)、HTMLスライド、Excel マクロ (VBA) を扱う自作 skill 一式",
-      "category": "Productivity"
+      "name": "claat",
+      "source": "./plugins/claat",
+      "description": ""
+    },
+    {
+      "name": "html-deck",
+      "source": "./plugins/html-deck",
+      "description": "ドラフトから HTML/PDF/PPTX スライドを自動生成するスキル"
+    },
+    {
+      "name": "usable-xlsm",
+      "source": "./plugins/usable-xlsm",
+      "description": "excelマクロ(VBA) の解析、動作テストをAIエージェントが行えるようにする。"
     }
   ]
 }

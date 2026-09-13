@@ -1,0 +1,10 @@
+{
+  "name": "html-deck",
+  "description": "ドラフトから HTML/PDF/PPTX スライドを自動生成するスキル",
+  "author": {
+    "name": "nogikun",
+    "url": "https://github.com/nogikun"
+  },
+  "repository": "https://github.com/nogikun/html-deck",
+  "skills": "./skills/"
+}

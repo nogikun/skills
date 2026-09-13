@@ -1,0 +1,10 @@
+{
+  "name": "usable-xlsm",
+  "description": "excelマクロ(VBA) の解析、動作テストをAIエージェントが行えるようにする。",
+  "author": {
+    "name": "nogikun",
+    "url": "https://github.com/nogikun"
+  },
+  "repository": "https://github.com/nogikun/usable-xlsm",
+  "skills": "./skills/"
+}

@@ -23,6 +23,12 @@ def sh(*args: str) -> str:
                           encoding="utf-8").stdout
 
 
+def write_json(path: Path, data: dict) -> None:
+    """改行は必ず LF。Windows で生成すると CRLF になって全行差分になる。"""
+    text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+    path.write_bytes(text.encode("utf-8"))
+
+
 def discover() -> list[dict]:
     """配布元と、そこにある skill 名を集める。"""
     repos = json.loads(sh(
@@ -87,14 +93,13 @@ def main() -> int:
         dest = staged / "plugins" / plugin
         shutil.copytree(src, dest / "skills")
         (dest / ".claude-plugin").mkdir(parents=True)
-        (dest / ".claude-plugin" / "plugin.json").write_text(
-            json.dumps({
-                "name": plugin,
-                "description": f["description"],
-                "author": {"name": OWNER, "url": f"https://github.com/{OWNER}"},
-                "repository": f"https://github.com/{f['repo']}",
-                "skills": "./skills/",
-            }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        write_json(dest / ".claude-plugin" / "plugin.json", {
+            "name": plugin,
+            "description": f["description"],
+            "author": {"name": OWNER, "url": f"https://github.com/{OWNER}"},
+            "repository": f"https://github.com/{f['repo']}",
+            "skills": "./skills/",
+        })
 
     marketplace = {
         "name": OWNER,
@@ -113,8 +118,7 @@ def main() -> int:
     shutil.rmtree(ROOT / "plugins", ignore_errors=True)
     shutil.copytree(staged / "plugins", ROOT / "plugins")
     (ROOT / ".claude-plugin").mkdir(exist_ok=True)
-    (ROOT / ".claude-plugin" / "marketplace.json").write_text(
-        json.dumps(marketplace, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_json(ROOT / ".claude-plugin" / "marketplace.json", marketplace)
 
     for f in found:
         print(f"{f['repo']}\t{f['repo'].split('/')[1]}\t{' '.join(f['skills'])}")

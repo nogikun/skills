@@ -1,0 +1,13 @@
+{
+  "name": "nogikun-skills",
+  "version": "0.1.0",
+  "description": "手順書 (claat)、HTMLスライド、Excel マクロ (VBA) を扱う自作 skill 一式",
+  "author": {
+    "name": "nogikun",
+    "url": "https://github.com/nogikun"
+  },
+  "repository": "https://github.com/nogikun/skills",
+  "license": "MIT",
+  "keywords": ["codelabs", "claat", "slides", "presentation", "excel", "vba"],
+  "skills": "./skills/"
+}

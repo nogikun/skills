@@ -22,6 +22,22 @@ npx skills add nogikun/skills
 npx skills add nogikun/skills -s html-deck
 ```
 
+プラグインとして入れることもできる。`.claude-plugin/marketplace.json` は
+Claude Code と Codex の両方が読む形式なので、マニフェストは 1 つで足りる。
+
+```console
+codex plugin marketplace add https://github.com/nogikun/skills
+codex plugin add nogikun-skills@nogikun
+```
+
+```console
+/plugin marketplace add nogikun/skills
+/plugin install nogikun-skills@nogikun
+```
+
+プラグイン経由では skill を選べず、5 つまとめて入る。
+選びたいときは上の `npx skills add -s <name>` を使う。
+
 ## 中身
 
 | skill | 何をするか | 配布元 | 追加で要るもの |

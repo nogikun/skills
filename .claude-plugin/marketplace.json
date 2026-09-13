@@ -1,0 +1,18 @@
+{
+  "name": "nogikun",
+  "owner": {
+    "name": "nogikun",
+    "url": "https://github.com/nogikun"
+  },
+  "interface": {
+    "displayName": "nogikun skills"
+  },
+  "plugins": [
+    {
+      "name": "nogikun-skills",
+      "source": "./",
+      "description": "手順書 (claat)、HTMLスライド、Excel マクロ (VBA) を扱う自作 skill 一式",
+      "category": "Productivity"
+    }
+  ]
+}

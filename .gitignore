@@ -1,0 +1,13 @@
+# ローカルにこの repo の skills を入れたときの成果物
+.agents/
+.claude/
+skills-lock.json
+
+# Python (skills/html-deck/tools)
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Node (PPTX 書き出しの実行時に降ってくる)
+node_modules/

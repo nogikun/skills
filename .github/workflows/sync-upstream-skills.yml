@@ -1,0 +1,100 @@
+# この repo は skill を集めて配るだけのミラー。正は各 skill の repo。
+#
+# 配布元は決め打ちしない。OWNER の public repo を走査して
+# `skills/<name>/SKILL.md` を持つものを配布元とみなす。
+# 新しい skill repo を作れば、次の実行から勝手に載る。
+name: sync-upstream-skills
+
+on:
+  schedule:
+    - cron: "0 21 * * 0" # 毎週月曜 06:00 JST
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  OWNER: nogikun
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: 配布元を探す
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # skills/<name>/SKILL.md だけを拾う。深い階層のものは配布対象にしない
+          JQ='.tree[] | select(.type == "blob") | .path
+              | select(startswith("skills/") and endswith("/SKILL.md")
+                       and (split("/") | length == 3))'
+          : > "$RUNNER_TEMP/found.tsv"
+          gh repo list "$OWNER" --no-archived --visibility public --limit 200 \
+            --json nameWithOwner --jq '.[].nameWithOwner' > "$RUNNER_TEMP/repos.txt"
+          while read -r repo; do
+            if [ "$repo" = "$GITHUB_REPOSITORY" ]; then continue; fi
+            # tree API 1 回で足りる
+            gh api "repos/$repo/git/trees/HEAD?recursive=1" --jq "$JQ" 2>/dev/null \
+              | cut -d/ -f2 \
+              | sed "s|^|$repo$(printf '\t')|" >> "$RUNNER_TEMP/found.tsv" || true
+          done < "$RUNNER_TEMP/repos.txt"
+          sort -o "$RUNNER_TEMP/found.tsv" "$RUNNER_TEMP/found.tsv"
+          cat "$RUNNER_TEMP/found.tsv"
+
+          if [ ! -s "$RUNNER_TEMP/found.tsv" ]; then
+            echo "::error::配布元が 1 つも見つからない。走査条件か権限を疑う"
+            exit 1
+          fi
+          # 同名 skill は後勝ちで黙って上書きされるので、ここで止める
+          dups=$(cut -f2 "$RUNNER_TEMP/found.tsv" | sort | uniq -d)
+          if [ -n "$dups" ]; then
+            echo "::error::skill 名が重複している: $(echo "$dups" | tr '\n' ' ')"
+            exit 1
+          fi
+
+      - name: 配布元から取得する
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/upstream"
+          cd "$RUNNER_TEMP/upstream"
+          cut -f1 "$RUNNER_TEMP/found.tsv" | sort -u | while read -r repo; do
+            npx -y skills@latest add "$repo" -y -s '*' -a claude-code
+          done
+
+      - name: skills/ を配布元の内容でまるごと置き換える
+        run: |
+          set -euo pipefail
+          rm -rf skills
+          cp -a "$RUNNER_TEMP/upstream/.claude/skills" skills
+
+      - name: PR の本文を組み立てる
+        run: |
+          set -euo pipefail
+          {
+            echo "配布元の \`skills/\` に入った変更。"
+            echo "この repo はミラーなので、内容に異論が無ければそのままマージする。"
+            echo
+            echo "**中身を直したくなったら配布元で直す。** ここで直しても次回の同期で消える。"
+            echo
+            echo "## 今回見つかった配布元"
+            echo
+            echo "| skill | 配布元 |"
+            echo "| --- | --- |"
+            awk -F'\t' '{printf "| `%s` | %s |\n", $2, $1}' "$RUNNER_TEMP/found.tsv"
+            echo
+            echo "README の表に無い skill が増えていたら、行を足してからマージする。"
+          } > "$RUNNER_TEMP/pr-body.md"
+
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          branch: sync-upstream-skills
+          title: "chore: 配布元の skills と同期"
+          commit-message: "chore: sync skills from upstream"
+          body-path: ${{ runner.temp }}/pr-body.md

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""配布元を自動発見して plugins/ と marketplace.json を作り直す。
+"""配布元を自動発見して skills/ と plugins/ を作り直す。
 
 配布元は決め打ちしない。OWNER の public repo のうち skills/<name>/SKILL.md を
 持つものを配布元とみなし、repo 1 つを plugin 1 つに対応させる。
@@ -95,6 +95,13 @@ def main() -> int:
         plugin = f["repo"].split("/")[1]
         dest = staged / "plugins" / plugin
         shutil.copytree(src, dest / "skills")
+        # Hermes の custom tap は repo 直下の skills/<name>/SKILL.md を読む。
+        # Claude/Codex の plugin 用コピーとは別に、同じ内容を flat な
+        # skills/ にも置いて、1 つの repo を両方の配布形式にする。
+        hermes_skills = staged / "skills"
+        hermes_skills.mkdir(parents=True, exist_ok=True)
+        for skill in f["skills"]:
+            shutil.copytree(src / skill, hermes_skills / skill)
         (dest / ".claude-plugin").mkdir(parents=True)
         write_json(dest / ".claude-plugin" / "plugin.json", {
             "name": plugin,
@@ -110,17 +117,37 @@ def main() -> int:
         "interface": {"displayName": f"{OWNER} skills"},
         "plugins": [
             {
-                "name": f["repo"].split("/")[1],
-                "source": f"./plugins/{f['repo'].split('/')[1]}",
-                "description": f["description"],
-            }
-            for f in found
+                "name": "skills",
+                "source": "./",
+                "description": f"{OWNER} が作った Agent Skills をまとめて導入する",
+            },
+            *[
+                {
+                    "name": f["repo"].split("/")[1],
+                    "source": f"./plugins/{f['repo'].split('/')[1]}",
+                    "description": f["description"],
+                }
+                for f in found
+            ]
         ],
     }
 
+    shutil.rmtree(ROOT / "skills", ignore_errors=True)
+    shutil.copytree(staged / "skills", ROOT / "skills")
     shutil.rmtree(ROOT / "plugins", ignore_errors=True)
     shutil.copytree(staged / "plugins", ROOT / "plugins")
     (ROOT / ".claude-plugin").mkdir(exist_ok=True)
+
+    # coji/natural-japanese と同じく、repo 直下自体も 1 つの plugin として
+    # 追加できるようにする。個別 plugin (`plugins/<repo>/`) も残すので、
+    # 利用者は全 skill 一括・配布元ごとのどちらでも選べる。
+    write_json(ROOT / ".claude-plugin" / "plugin.json", {
+        "name": "skills",
+        "description": f"{OWNER} が作った Agent Skills の配布用ミラー",
+        "author": {"name": OWNER, "url": f"https://github.com/{OWNER}"},
+        "repository": f"https://github.com/{OWNER}/skills",
+        "skills": "./skills/",
+    })
     write_json(ROOT / ".claude-plugin" / "marketplace.json", marketplace)
 
     for f in found:

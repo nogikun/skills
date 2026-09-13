@@ -1,10 +1,10 @@
 # skills
 
 nogikun が作った [Agent Skills](https://code.claude.com/docs/en/skills) を 1 コマンドで入るようにまとめた repo。
-Claude Code / Cursor など SKILL.md を読むエージェントで使える。
+Claude Code / Codex / Cursor など SKILL.md を読むエージェントで使える。
 
-**ここは配布用のミラー。** skill の中身は下の表の「配布元」が正で、この repo の `skills/` は
-[週次の workflow](.github/workflows/sync-upstream-skills.yml) がそこから同期している。
+**ここは配布用のミラー。** skill の中身は下の表の「配布元」が正で、この repo の `skills/` と
+`plugins/` は [週次の workflow](.github/workflows/sync-upstream-skills.yml) がそこから同期している。
 配布元は決め打ちしていない。`nogikun` の public repo で `skills/<name>/SKILL.md` を
 持つものを自動で拾うので、skill repo を新しく作れば次の同期から勝手に載る。
 **repo 1 つが plugin 1 つ**で、1 つの repo に skill が複数あればまとめて 1 plugin になる。
@@ -23,19 +23,40 @@ npx skills add nogikun/skills
 npx skills add nogikun/skills -s html-deck
 ```
 
+OpenSkills 経由なら次の形でも入れられる。Cursor / ChatGPT / Codex など、`AGENTS.md` を使う環境向け。
+
+```console
+npx openskills install nogikun/skills
+npx openskills sync
+```
+
 プラグインとして入れることもできる。`.claude-plugin/marketplace.json` は
 Claude Code と Codex の両方が読む形式なので、マニフェストは 1 つで足りる。
 plugin は配布元の repo ごとに分かれている (`claat` / `html-deck` / `usable-xlsm`)。
 
 ```console
 codex plugin marketplace add https://github.com/nogikun/skills
+codex plugin add skills@nogikun
 codex plugin add html-deck@nogikun
 ```
 
 ```console
 /plugin marketplace add nogikun/skills
+/plugin install skills@nogikun
 /plugin install html-deck@nogikun
 ```
+
+Hermes Agent の Skills Hub でも使える。Hermes は repo 直下の `skills/` を custom tap として読む。
+初回だけ tap を追加すると、CLI と Web ダッシュボードの Browse hub / 検索から見えるようになる。
+
+```console
+hermes skills tap add nogikun/skills
+hermes skills search html-deck
+hermes skills install nogikun/skills/html-deck
+```
+
+Web ダッシュボードを開いている場合も、同じ Hermes の設定を使うため、tap 追加後に Browse hub を
+再読み込みする。tap を追加していない状態では、Hermes の標準カタログに自動登録されるわけではない。
 
 ## 中身
 

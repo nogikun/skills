@@ -1,0 +1,10 @@
+{
+  "name": "skills",
+  "description": "nogikun が作った Agent Skills の配布用ミラー",
+  "author": {
+    "name": "nogikun",
+    "url": "https://github.com/nogikun"
+  },
+  "repository": "https://github.com/nogikun/skills",
+  "skills": "./skills/"
+}

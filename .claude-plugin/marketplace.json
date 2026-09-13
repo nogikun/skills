@@ -9,6 +9,11 @@
   },
   "plugins": [
     {
+      "name": "skills",
+      "source": "./",
+      "description": "nogikun が作った Agent Skills をまとめて導入する"
+    },
+    {
       "name": "claat",
       "source": "./plugins/claat",
       "description": "claat 形式の手順書を lint して Google Codelabs の HTML にする Go CLI と skill"

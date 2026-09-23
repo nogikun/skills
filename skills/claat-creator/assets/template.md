@@ -1,8 +1,8 @@
 summary: 説明文
-id: 一意のIDを定義
+id: replace-me
 categories: 任意のカテゴリ
-environments: Web、Kioskのいずれかを指定
-status: Draft、Published、Deprecated、Hiddenのいずれかを指定
+environments: Web
+status: Draft
 feedback link: フィードバックの送信先
 analytics account: GoogleアナリティクスID
 

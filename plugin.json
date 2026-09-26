@@ -1,5 +1,5 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "nogikun",
-  "description": "Skills: claat-build, claat-creator, claat-writer, html-deck, usable-xlsm"
+  "description": "Skills: aws-drawio-import, claat-creator, html-deck, usable-xlsm"
 }

@@ -1,0 +1,5 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "aws-icons",
+  "description": "AWSアイコンパッケージZIP（Icon-package_*.zip）を受け取り、draw.io用SVGライブラリ（mxlibrary形式のXML）に変換して保存する。ユーザーが「新しいAWSアイコンZIPを取り込んで」「icon-package…zipをdrawio用にして」「AWSアイコンをdraw.ioで使えるようにしたい」などと言ったとき、またはIcon-package_*.zipのパスを渡されたときは必ずこのスキルを使うこと。"
+}

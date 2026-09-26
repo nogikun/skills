@@ -1,0 +1,10 @@
+{
+  "name": "aws-icons",
+  "description": "",
+  "author": {
+    "name": "nogikun",
+    "url": "https://github.com/nogikun"
+  },
+  "repository": "https://github.com/nogikun/aws-icons",
+  "skills": "./skills/"
+}

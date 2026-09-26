@@ -1,0 +1,5 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "usable-xlsm",
+  "description": "Safely inspect, edit, test, and release VBA and workbook-object changes in trusted .xlsm/.xlsb/.xltm workbooks on a dedicated Windows Excel worker. Use for VBA or macro-enabled workbook development, repair, review, regression testing, and controlled promotion. Do not use for plain .xlsx data work, arbitrary untrusted Office files, or server-side concurrent Office automation."
+}

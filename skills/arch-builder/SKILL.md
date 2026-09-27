@@ -69,6 +69,7 @@ doctor は取り込んだ **Asset Package の日付**も出す。報告に書く
 **依頼に無い前提を黙って確定しない。** 特に利用者の入り方 (インターネット公開か社内限定か) は、
 セキュリティの形がまるごと変わる。聞けないとき (聞く回数を使い切った、ユーザーがいない) は、
 もっともらしい方で描いたうえで、**図の中に前提として書く** (`notes:`。spec.md) し、報告の「前提」にも書く。
+注記は図全体表示でも本文ラベルに近い大きさで読める必要がある。`notes:` はページ幅に合わせて出力されるため、前提ごとに短く分ける。
 
 「厳しめ」は、ユーザーが「厳しめに」「レビューに出す」「読み違いが無いように」と言ったときに選ぶ。
 批評の `should` も解消するか、解消できないものを未解決として報告に並べる (手順5)。
@@ -98,6 +99,7 @@ doctor は取り込んだ **Asset Package の日付**も出す。報告に書く
   - `NAT Gateway` `ALB` `S3` のような通称・略称でも公式名に解決される
 - グループは `group:` で種類を指定する (`aws-cloud` / `region` / `vpc` / `az` / `public-subnet` / `private-subnet` /
   `security-group` / `auto-scaling` / `account` / `corporate-dc` / `generic` など。一覧は spec.md)
+- 子を持つ `generic` はまとまりの枠、ラベル付きで線につながる空の `generic` は外部端点としてコンパクトな実線箱になる。未接続の空 group は lint 警告になる
 - 並べ方を整えるための箱は `group: layout` にする。枠は描かれず、入れ子の規約チェックでも無いものとして扱われる
 - 図は **Web ページのヘッダー / ボディ / フッター**で組む。ヘッダーの上 (VPC 上辺) に IGW、ヘッダーに ALB、
   ボディに AZ を横並び (各 AZ の中は public → app → data を上から下)、フッター (VPC 下辺) に外へ出す口。
@@ -112,7 +114,7 @@ doctor は取り込んだ **Asset Package の日付**も出す。報告に書く
 uv run --project "<SKILL>/tools" arch build <slug>.arch.yaml -o <slug>.drawio
 ```
 
-build は生成と同時に lint (規約チェック) を行う。アイコン名や id の誤りがあると、.drawio は書き出されない。
+build は UTF-8 (BOM 付きも可) の arch.yaml を読み、生成した一時 `.drawio` を再読込して lint する。`flow` と明示した `exit` / `entry` は `.drawio` に保持する。build 時と保存後の lint 結果が一致しない場合、または保存後に error がある場合は失敗し、既存出力を置き換えない。
 
 ## 4. 決定的検査 (lint) — error を 0 件にする
 

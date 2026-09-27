@@ -64,6 +64,7 @@ def lint(m: Model, layout_first: bool = False) -> list[Finding]:
         add("error", code, iid, msg)
 
     ids = set(m.items)
+    connected = {end for e in m.edges if e.src in ids and e.dst in ids for end in (e.src, e.dst)}
     nodes = [i for i in m.items.values() if i.kind == "node"]
     groups = [i for i in m.items.values() if i.kind == "group"]
 
@@ -128,7 +129,7 @@ def lint(m: Model, layout_first: bool = False) -> list[Finding]:
             add("error", "N-NESTING", it.id,
                 f"{it.group} が {parent or 'キャンバス直下'} の中にある。入れ子の順序は AWS Cloud ⊃ Region ⊃ VPC ⊃ AZ ⊃ Subnet",
                 f"{it.group} の親は {want}")
-        if not it.children and it.group != LAYOUT_ONLY:
+        if not it.children and not (it.group == "generic" and it.label.strip() and it.id in connected):
             add("warn", "N-EMPTY-GROUP", it.id, f"{it.group} が空", "不要なら消す")
         if it.group == "region" and not re.search(r"[a-z]{2}-[a-z]+-\d|東京|大阪|バージニア|オレゴン", it.label or ""):
             add("info", "N-REGION-LABEL", it.id, "Region のラベルにリージョン名が無い", "例: 'ap-northeast-1 (東京)'")

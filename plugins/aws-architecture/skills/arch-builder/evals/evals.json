@@ -134,6 +134,42 @@
           "text": "report.md が直した点を一つずつ説明している"
         }
       ]
+    },
+    {
+      "id": 4,
+      "prompt": "【画像由来ベンチマーク】設計レビュー用の AWS 構成図を作ってください。AWS Cloud の外に User を置き、HTTPS を Internet Gateway 経由でフロントエンド VPC の Public Subnet にある ALB へつなぐ。ALB から Private Subnet の Fargate へ HTTPS で接続し、WAF の Web ACL association は通信線と区別して破線で示す。下段に AgentCore Platform VPC を置き、Private Subnet 内で Orchestrator Agent → AgentCore Gateway → SubAgent A/B/C の順に分岐させ、3つの SubAgent は縦に並べて Interceptor に集約する。Fargate から Orchestrator へ HTTPS、各 SubAgent から AWS Account 内の Role-MCP-A/B/C へ破線の関連を示す。Interceptor から HTTPS / MCP で別の MCP VPC に接続し、その Private Subnet に Cedar Policy Engine と AgentCore Gateway、MCP Server A/B/C を置く。各 MCP Server から AWS environment、AWS Knowledge Server、RAG (DynamoDB) へそれぞれ接続する。元資料で分からない Region、AZ、VPC 間の具体的なネットワーク経路、Role の権限内容は決めつけず、図と報告に不明点として残す。",
+      "expected_output": "編集可能な .arch.yaml / .drawio と、同じ最終 .drawio から書き出して目視批評した PNG。図と報告に未知のネットワーク前提を明示し、AgentCore の VPC 接続表現は AWS 公式資料で確認する。lint error 0。意図した generic endpoint box は接続済みなら空グループ警告にしない。MCP Server と各接続先を水平に対応づけ、SubAgent と Role の破線を独立して追える配置にする。",
+      "files": [],
+      "assertions": [
+        {
+          "type": "machine",
+          "text": "最終 .drawio の保存後 lint で error が 0 件。flow と明示した exit / entry が保存・再読込後も保持される"
+        },
+        {
+          "type": "machine",
+          "text": "ラベル付きで接続済みの generic endpoint は compact な実線箱として描き N-EMPTY-GROUP を出さず、未接続の空 generic group は引き続き警告される"
+        },
+        {
+          "type": "machine",
+          "text": "編集可能な .arch.yaml / .drawio と、最終 .drawio から生成した確認用 PNG がそろう。生成できない環境ではその事実と理由を報告する"
+        },
+        {
+          "type": "design",
+          "text": "User、WAF、frontend VPC の IGW / ALB / Fargate、2つの AgentCore VPC、Orchestrator / Gateway / 縦並び3 SubAgent / Interceptor、横並び3 IAM role、3 MCP Server と各接続先が表現され、各MCP接続先は対応Serverと同じ高さに置かれる"
+        },
+        {
+          "type": "design",
+          "text": "Region / AZ / VPC 間経路 / IAM 権限を捏造せず、未確定事項を図の注記と報告に残す"
+        },
+        {
+          "type": "design",
+          "text": "AWS 公式資料を調べ、AgentCore Runtime の VPC ENI と Gateway への PrivateLink / Gateway の VPC egress を区別して、図の配置が論理表現か実リソース配置か報告する"
+        },
+        {
+          "type": "legibility",
+          "text": "PNG だけを見て WAF association、HTTPS/MCP の主経路、3本の IAM 関連線、Gateway から各 MCP Server と接続先への対応を読み違えない。注記を全体表示で読める。最終版を厳しめの別モデル批評に通し、pass する"
+        }
+      ]
     }
   ],
   "protocol": "evals/README.md を参照。1 プロンプト × 1 条件あたり 3 回。type ごとに採点者を分ける"

@@ -31,7 +31,7 @@
 | `N-EDGE-THROUGH-NODE` | error | 接続線がアイコンかラベルを横切っている (自分自身も含む) | 線の下の文字が読めない。経路は build が探索するので、残ったら並び順か `exit`/`entry` で直す |
 | `N-ICON-SIZE` | warn | アイコンが 48px 以外 | [1] 図の中のアイコンの大きさはそろえる |
 | `N-LABEL-LONG` / `N-EDGE-LABEL-LONG` | warn | ラベルが長い | 他の要素と重なりやすい |
-| `N-EMPTY-GROUP` | warn | 空のグループ | 描き残し |
+| `N-EMPTY-GROUP` | warn | 子を持たないグループ | 描き残し。接続済みでラベルのある `generic` グループは、外部システムなどの端点として扱うため対象外 |
 | `N-SUBNET-OUTSIDE-AZ` | warn | AZ を描いた VPC で、AZ の外に subnet がある | [2] subnet は必ず1つの AZ に属する |
 | `N-NODE-IN-AZ` | warn | AZ の直下にリソースがある | [2] リソースは subnet に属する |
 | `N-NODE-IN-VPC` | warn | 境界要素以外のリソースが VPC の直下にある | [2] 同上 |

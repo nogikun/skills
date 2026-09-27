@@ -9,11 +9,12 @@ import re
 import urllib.parse
 import zlib
 from pathlib import Path
+from xml.etree import ElementTree as ET
 
 import pytest
 import yaml
 
-from arch_builder import cli
+from arch_builder import cli, rules
 from arch_builder.rules import lint
 
 SKILL = Path(__file__).resolve().parents[2]
@@ -32,7 +33,7 @@ def codes(model):
 
 def spec(tmp_path, items, edges=()):
     p = tmp_path / "t.arch.yaml"
-    p.write_text(yaml.safe_dump({"title": "t", "items": items, "edges": list(edges)}, allow_unicode=True))
+    p.write_text(yaml.safe_dump({"title": "t", "items": items, "edges": list(edges)}, allow_unicode=True), encoding="utf-8")
     return p
 
 
@@ -61,9 +62,67 @@ def test_example_is_clean(tmp_path):
                                                ("N-EDGE-NEAR-NODE", "nat-a"), ("N-EDGE-NEAR-NODE", "nat-c")}
 
 
+def test_utf8_yaml_build_preserves_flow_and_saved_lint(tmp_path, capsys):
+    p = spec(tmp_path, [{"id": "cloud", "group": "aws-cloud", "children": [
+        {"id": "region", "group": "region", "label": "ap-northeast-1", "children": [
+                    {"id": "vpc", "group": "vpc", "label": "VPC layout round-trip regression fixture for retained flow direction and explicit port settings", "flow": "right", "children": [
+                {"id": "subnet", "group": "private-subnet", "flow": "right", "layout": "column", "children": [
+                    {"id": "a", "icon": "Amazon EC2", "label": "処理A"},
+                    {"id": "b", "icon": "AWS Lambda", "label": "処理B"}]}]}]}]}],
+        [{"from": "a", "to": "b", "label": "HTTPS", "exit": "right", "entry": "left"}])
+    p.write_text("\ufeff" + p.read_text(encoding="utf-8"), encoding="utf-8")
+    out = tmp_path / "図.drawio"
+
+    assert cli.main(["build", str(p), "-o", str(out)]) == 0
+    assert "wrote" in capsys.readouterr().out
+    saved = cli.load_drawio(out, LIB)
+    assert saved.items["vpc"].flow == saved.items["subnet"].flow == "right"
+    assert (saved.edges[0].exit, saved.edges[0].entry) == ("right", "left")
+    assert not [f for f in lint(saved) if f.code.startswith("N-PORT-")]
+
+
+def test_build_preserves_existing_output_when_saved_lint_differs(tmp_path, monkeypatch):
+    out = tmp_path / "existing.drawio"
+    out.write_text("previous output", encoding="utf-8")
+    monkeypatch.setattr(rules, "lint", lambda m, layout_first=False: [] if not m.from_drawio else [
+        rules.Finding("warn", "TEST-ROUND-TRIP", "fixture", "saved model differs")])
+
+    assert cli.main(["build", str(EXAMPLE), "-o", str(out)]) == 1
+    assert out.read_text(encoding="utf-8") == "previous output"
+
+
 def test_nesting_order_is_enforced(tmp_path):
     p = spec(tmp_path, [{"id": "v", "group": "vpc", "children": [{"id": "e", "icon": "Amazon EC2", "label": "x"}]}])
     assert ("N-NESTING", "v") in codes(cli.load_yaml(p, LIB))
+
+
+def test_connected_generic_endpoint_is_not_an_empty_group(tmp_path):
+    items = [
+        {"id": "caller", "icon": "Amazon EC2", "label": "Caller"},
+        {"id": "server", "group": "generic", "label": "MCP Server"},
+    ]
+    edges = [{"from": "caller", "to": "server"}]
+    assert ("N-EMPTY-GROUP", "server") not in codes(cli.load_yaml(spec(tmp_path, items, edges), LIB))
+
+
+def test_connected_generic_endpoint_renders_as_compact_solid_box(tmp_path):
+    items = [
+        {"id": "caller", "icon": "Amazon EC2", "label": "Caller"},
+        {"id": "server", "group": "generic", "label": "MCP Server A"},
+    ]
+    m = cli.load_yaml(spec(tmp_path, items, [{"from": "caller", "to": "server"}]), LIB)
+    cli.layout(m)
+    width, height = m.items["server"].box[2:]
+    cell = ET.fromstring(cli.to_drawio(m)).find("./diagram/mxGraphModel/root/object[@id='server']/mxCell")
+
+    assert width < 200 and height < 120
+    assert "rounded=1" in cell.get("style") and "dashed=0" in cell.get("style")
+    assert "container=0" in cell.get("style")
+
+
+def test_unconnected_generic_group_is_still_an_empty_group(tmp_path):
+    items = [{"id": "empty", "group": "generic", "label": "Empty"}]
+    assert ("N-EMPTY-GROUP", "empty") in codes(cli.load_yaml(spec(tmp_path, items), LIB))
 
 
 def test_layout_group_is_transparent_to_nesting(tmp_path):
@@ -94,12 +153,12 @@ def test_unknown_and_category_icons_are_errors(tmp_path):
 
 def test_drawio_round_trip_keeps_geometry(tmp_path):
     d1 = tmp_path / "a.drawio"
-    d1.write_text(cli.to_drawio(cli.load_yaml(EXAMPLE, LIB)))
+    d1.write_text(cli.to_drawio(cli.load_yaml(EXAMPLE, LIB)), encoding="utf-8")
     y = tmp_path / "rt.arch.yaml"
     cli.main(["import", str(d1), "-o", str(y)])
     d2 = cli.to_drawio(cli.load_yaml(y, LIB))
     geo = lambda s: re.findall(r"<mxGeometry[^>]*>", s)  # noqa: E731
-    assert geo(d1.read_text()) == geo(d2)
+    assert geo(d1.read_text(encoding="utf-8")) == geo(d2)
 
 
 def test_hand_edit_in_drawio_is_checked(tmp_path):
@@ -108,7 +167,7 @@ def test_hand_edit_in_drawio_is_checked(tmp_path):
     # rds-a を pub-a と同じ相対位置 (y を小さく) に動かす: 見た目は DB subnet の外に出る
     xml = re.sub(r'(<object id="rds-a"[^>]*>\s*<mxCell[^>]*>\s*<mxGeometry x="[^"]*" y=")[^"]*', r"\g<1>-400", xml)
     p = tmp_path / "e.drawio"
-    p.write_text(xml)
+    p.write_text(xml, encoding="utf-8")
     got = {c for c, _ in codes(cli.load_drawio(p, LIB))}
     assert "N-ESCAPE" in got and "N-VISUAL-PARENT" in got
 
@@ -119,13 +178,13 @@ def test_compressed_drawio_is_readable(tmp_path):
     c = zlib.compressobj(9, zlib.DEFLATED, -15)
     packed = base64.b64encode(c.compress(urllib.parse.quote(model).encode()) + c.flush()).decode()
     p = tmp_path / "z.drawio"
-    p.write_text(f'<mxfile><diagram id="a" name="z">{packed}</diagram></mxfile>')
+    p.write_text(f'<mxfile><diagram id="a" name="z">{packed}</diagram></mxfile>', encoding="utf-8")
     assert len(cli.load_drawio(p, LIB).items) == len(cli.load_yaml(EXAMPLE, LIB).items)
 
 
 def test_edit_ops(tmp_path):
     p = tmp_path / "x.arch.yaml"
-    p.write_text(EXAMPLE.read_text())
+    p.write_text(EXAMPLE.read_text(encoding="utf-8"), encoding="utf-8")
     run = lambda *a: cli.main(["edit", str(p), *a])  # noqa: E731
     run("add-node", "cache", "--icon", "ElastiCache", "--label", "Cache", "--parent", "db-a")
     run("connect", "ecs-a", "cache", "--label", "Redis")
@@ -174,7 +233,7 @@ def test_edge_through_a_node_is_an_error(tmp_path):
 
 def test_route_survives_drawio_round_trip(tmp_path):
     p = tmp_path / "r.drawio"
-    p.write_text(cli.to_drawio(cli.load_yaml(EXAMPLE, LIB)))
+    p.write_text(cli.to_drawio(cli.load_yaml(EXAMPLE, LIB)), encoding="utf-8")
     m = cli.load_drawio(p, LIB)
     assert all(e.path for e in m.edges)  # waypoint から経路を復元できる
     # 経路も接続口も読み戻せる (読み戻した図でも、接続口の誤りや線の横切りにならない)
@@ -183,7 +242,7 @@ def test_route_survives_drawio_round_trip(tmp_path):
 
 def test_set_edge(tmp_path):
     p = tmp_path / "x.arch.yaml"
-    p.write_text(EXAMPLE.read_text())
+    p.write_text(EXAMPLE.read_text(encoding="utf-8"), encoding="utf-8")
     cli.main(["edit", str(p), "set-edge", "alb", "ecs-a", "label=HTTP", "exit=bottom", "dashed=true"])
     e = next(e for e in cli.load_yaml(p, LIB).edges if (e.src, e.dst) == ("alb", "ecs-a"))
     assert (e.label, e.exit, e.dashed) == ("HTTP", "bottom", True)
@@ -196,21 +255,29 @@ def test_gateways_sit_on_the_vpc_border(tmp_path):
     ix, iy, iw, ih = cli.icon_box(igw)
     assert igw.border == "top" and abs(iy + ih / 2 - vpc.box[1]) < 0.5  # 中心が VPC の上辺の線に乗る
     p = tmp_path / "b.drawio"
-    p.write_text(cli.to_drawio(m))
+    p.write_text(cli.to_drawio(m), encoding="utf-8")
     assert cli.load_drawio(p, LIB).items["igw"].border == "top"  # 取り込みでも座標から判定できる
     y = tmp_path / "b.arch.yaml"
-    y.write_text(EXAMPLE.read_text().replace("{id: igw, icon: Internet Gateway, label: Internet Gateway}",
-                                             "{id: igw, icon: Internet Gateway, label: Internet Gateway, border: none}"))
+    y.write_text(EXAMPLE.read_text(encoding="utf-8").replace(
+        "{id: igw, icon: Internet Gateway, label: Internet Gateway}",
+        "{id: igw, icon: Internet Gateway, label: Internet Gateway, border: none}"), encoding="utf-8")
     assert ("A-GATEWAY-BORDER", "igw") in codes(cli.load_yaml(y, LIB))
 
 
 def test_notes_round_trip_and_near_node_warning(tmp_path):
     y = tmp_path / "n.arch.yaml"
-    y.write_text(EXAMPLE.read_text() + "notes:\n  - 前提: 社員はインターネット経由で入る\n")
+    y.write_text(EXAMPLE.read_text(encoding="utf-8") + "notes:\n  - 前提: 社員はインターネット経由で入る\n",
+                  encoding="utf-8")
     p = tmp_path / "n.drawio"
-    p.write_text(cli.to_drawio(cli.load_yaml(y, LIB)))
+    p.write_text(cli.to_drawio(cli.load_yaml(y, LIB)), encoding="utf-8")
     m = cli.load_drawio(p, LIB)
     assert m.notes == ["前提: 社員はインターネット経由で入る"] and "__notes" not in m.items
+    note = ET.fromstring(p.read_text(encoding="utf-8")).find("./diagram/mxGraphModel/root/object[@id='__notes']")
+    note_style = note.find("mxCell").get("style")
+    note_geometry = note.find("mxCell/mxGeometry")
+    model = ET.fromstring(p.read_text(encoding="utf-8")).find("./diagram/mxGraphModel")
+    assert "fontSize=14" in note_style
+    assert float(note_geometry.get("width")) == pytest.approx(float(model.get("pageWidth")) - 80)
 
     from arch_builder.route import port
     m = cli.load_yaml(row_of_three(tmp_path), LIB)
@@ -260,7 +327,8 @@ def test_port_rules_and_slots(tmp_path):
     assert back.sides == ("left", "right")  # 上流 (左) へ戻る線は点対称: 自分の入口の面から出て、相手の出口の面に入る
     # 手で面を変えた .drawio は N-PORT-FACE になる
     p = tmp_path / "p.drawio"
-    p.write_text(re.sub(r"exitX=1;exitY=[0-9.]+", "exitX=0.5;exitY=0", cli.to_drawio(m), count=1))
+    p.write_text(re.sub(r"exitX=1;exitY=[0-9.]+", "exitX=0.5;exitY=0", cli.to_drawio(m), count=1),
+                 encoding="utf-8")
     assert "N-PORT-FACE" in {f.code for f in lint(cli.load_drawio(p, LIB))}
 
 

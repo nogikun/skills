@@ -14,6 +14,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import urllib.parse
 import zlib
 from dataclasses import dataclass, field
@@ -255,7 +256,7 @@ class Model:
 
 
 def load_yaml(path: Path, lib: Library | None) -> Model:
-    doc = yaml.safe_load(path.read_text()) or {}
+    doc = yaml.safe_load(path.read_text(encoding="utf-8-sig")) or {}
     m = Model(doc.get("title", path.stem), {}, [], [], lib)
 
     def add(raw: dict, parent: str | None):
@@ -369,6 +370,11 @@ def measure(m: Model, iid: str) -> tuple[float, float]:
     it = m.items[iid]
     if it.kind == "node":
         return node_box_size(it)
+    if (it.group == "generic" and not it.children
+            and any(it.id in (e.src, e.dst) for e in m.edges)):
+        # 接続済み generic leaf はコンテナではなく、ラベル付きの外部端点として小さく描く。
+        lw, lh = label_size(it.label)
+        return max(140, lw + 24), max(64, lh + 24)
     sizes = [(c, *measure(m, c)) for c in it.children]
     edge_nodes = [s for s in sizes if on_border(m.items[s[0]]) and not m.items[s[0]].pos]
     sizes = [s for s in sizes if s not in edge_nodes]
@@ -640,7 +646,10 @@ def route(m: Model):
 # ---------------------------------------------------------------------------
 # .drawio 書き出し
 # ---------------------------------------------------------------------------
-def group_style(spec: GroupSpec, has_icon: bool) -> str:
+def group_style(spec: GroupSpec, has_icon: bool, endpoint: bool = False) -> str:
+    if endpoint:
+        return ("rounded=1;whiteSpace=wrap;html=1;container=0;fillColor=#FFFFFF;strokeColor=#7D8998;dashed=0;"
+                "fontColor=#232F3E;fontSize=12;align=center;verticalAlign=middle;spacing=8;")
     if spec.stroke == "none":
         return "rounded=0;html=1;container=1;collapsible=0;recursiveResize=0;fillColor=none;strokeColor=none;pointerEvents=0;"
     return ";".join([
@@ -696,8 +705,10 @@ def to_drawio(m: Model) -> str:
             spec = GROUPS.get(it.group, GROUPS["generic"])
             gi = m.lib.group_icon(spec.icon) if spec.icon else None
             x, y, w, h = it.box
-            vertex(it.id, it.label or spec.label, group_style(spec, bool(gi)), parent, (x - px, y - py, w, h),
-                   arch_kind="group", arch_group=it.group)
+            endpoint = (it.group == "generic" and not it.children
+                        and any(it.id in (e.src, e.dst) for e in m.edges))
+            vertex(it.id, it.label or spec.label, group_style(spec, bool(gi), endpoint), parent, (x - px, y - py, w, h),
+                   arch_kind="group", arch_group=it.group, arch_flow=it.flow or "")
             if gi:
                 vertex(f"{it.id}__icon", "", node_style(gi) + "movable=0;resizable=0;deletable=0;editable=0;",
                        it.id, (0, 0, GROUP_ICON, GROUP_ICON), arch_kind="group-icon")
@@ -710,16 +721,17 @@ def to_drawio(m: Model) -> str:
     if m.notes:  # 前提・注記は図の下に並べる。図の要素ではないので lint や経路探索の対象にしない
         bottom = max((m.items[r].box[1] + m.items[r].box[3] for r in m.roots), default=0)
         lines = "<br>".join(f"※ {n}" for n in m.notes)
-        vertex("__notes", lines, "text;html=1;align=left;verticalAlign=top;fontSize=12;fontColor=#545B64;"
-               "whiteSpace=wrap;", "1", (40, bottom + 24, 900, LABEL_LINE * len(m.notes) + 8), arch_kind="note")
+        vertex("__notes", lines, "text;html=1;align=left;verticalAlign=top;fontSize=14;fontColor=#545B64;"
+               "whiteSpace=wrap;", "1", (40, bottom + 24, pw - 80, 20 * len(m.notes) + 8), arch_kind="note")
     from arch_builder.route import port_style
     for i, e in enumerate(m.edges):
         style = edge_style(e)
         if e.path:  # 経路探索の結果を、接続口と waypoint として固定する
             style += (port_style(route_box(m.items[e.src]), e.sides[0], "exit", e.fracs[0])
                       + port_style(route_box(m.items[e.dst]), e.sides[1], "entry", e.fracs[1]))
-        cell = ET.SubElement(root, "mxCell", id=f"e{i}__{e.src}__{e.dst}", value=_html_label(e.label),
-                             style=style, edge="1", parent="1", source=e.src, target=e.dst)
+        obj = ET.SubElement(root, "object", id=f"e{i}__{e.src}__{e.dst}", label=_html_label(e.label),
+                            arch_exit=e.exit or "", arch_entry=e.entry or "")
+        cell = ET.SubElement(obj, "mxCell", style=style, edge="1", parent="1", source=e.src, target=e.dst)
         geo = ET.SubElement(cell, "mxGeometry", relative="1", **{"as": "geometry"})
         if e.path and len(e.path) > 2:
             arr = ET.SubElement(geo, "Array", **{"as": "points"})
@@ -797,6 +809,7 @@ def load_drawio(path: Path, lib: Library | None) -> Model:
         kind = attrs.get("arch_kind")
         if kind == "group" or (not kind and st.get("container") == "1"):
             it = Item(cid, "group", parent, label, group=attrs.get("arch_group", "generic"), pos=gx[:2], size=gx[2:])
+            it.flow = attrs.get("arch_flow") or None
             if it.label == GROUPS.get(it.group, GROUPS["generic"]).label:
                 it.label = ""
         elif st.get("image", "").startswith("data:"):
@@ -843,7 +856,8 @@ def load_drawio(path: Path, lib: Library | None) -> Model:
             arrow = "none" if st.get("endArrow") == "none" and st.get("startArrow") in (None, "none") else (
                 "both" if st.get("startArrow") not in (None, "none") else "end")
             label = _plain(attrs.get("label", "") or c.get("value", ""))
-            e = Edge(s, t, label, st.get("dashed") == "1", arrow)
+            e = Edge(s, t, label, st.get("dashed") == "1", arrow,
+                     attrs.get("arch_exit") or None, attrs.get("arch_entry") or None)
             if s in m.items and t in m.items:
                 e.path = _drawio_path(m.items[s], m.items[t], st, c.find("mxGeometry"))
                 if "exitX" in st and "entryX" in st:
@@ -942,10 +956,21 @@ def cmd_doctor(args) -> int:
             print("  ACTION: ユーザーに AWS 公式アイコン (Asset Package の ZIP) の用意を依頼する。")
             print(f"    ダウンロード: {ICON_DOWNLOAD_URL}")
             print("    ZIP のパスを受け取ったら `arch icons build <zip>` で取り込む。")
-    node = subprocess.run(["node", "--version"], capture_output=True, text=True) if _which("node") else None
+    try:
+        node = subprocess.run(["node", "--version"], capture_output=True, text=True) if _which("node") else None
+    except OSError:
+        node = None
     print(f"[node] {node.stdout.strip() if node and node.returncode == 0 else 'NG: 無い (PNG 書き出しに必要)'}")
-    desktop = os.environ.get("DRAWIO_CMD") or next((p for p in ("/Applications/draw.io.app/Contents/MacOS/draw.io",
-                                                                  "/usr/bin/drawio", "/snap/bin/drawio") if Path(p).exists()), None) or _which("drawio")
+    desktop = os.environ.get("DRAWIO_CMD")
+    if desktop and not Path(desktop).is_file():
+        desktop = None
+    if not desktop:
+        windows_candidates = (Path(os.environ.get("ProgramFiles", "")) / "draw.io" / "draw.io.exe",
+                             Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "draw.io" / "draw.io.exe")
+        desktop = next((str(p) for p in windows_candidates if p.is_file()), None)
+    desktop = desktop or next((p for p in ("/Applications/draw.io.app/Contents/MacOS/draw.io",
+                                           "/usr/bin/drawio", "/snap/bin/drawio") if Path(p).exists()), None)
+    desktop = desktop or _which("draw.io") or _which("drawio")
     print(f"[draw.io Desktop] {desktop or '無い (PNG の代わりに SVG で確認する)'}")
     print("OK" if ok else "NG: アイコンが揃うまで作図に進まない")
     return 0 if ok else 2
@@ -989,10 +1014,27 @@ def cmd_build(args) -> int:
         print(report(findings))
         print("生成できない error がある。arch.yaml を直す", file=sys.stderr)
         return 1
-    out.write_text(to_drawio(m))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".drawio", dir=out.parent, delete=False) as f:
+        temp = Path(f.name)
+        f.write(to_drawio(m))
+    try:
+        saved_findings = lint(load_drawio(temp, lib), layout_first=False)
+        signature = lambda fs: sorted((x.severity, x.code, x.id or "") for x in fs)  # noqa: E731
+        if signature(findings) != signature(saved_findings):
+            print("build時と保存後のlint結果が一致しないため、出力を更新しない", file=sys.stderr)
+            print(report(saved_findings))
+            return 1
+        if any(f.severity == "error" for f in saved_findings):
+            print(report(saved_findings))
+            print("保存後lintに error があるため、出力を更新しない", file=sys.stderr)
+            return 1
+        temp.replace(out)
+    finally:
+        temp.unlink(missing_ok=True)
     print(f"wrote {out}")
-    print(report(findings))
-    return 1 if any(f.severity == "error" for f in findings) else 0
+    print(report(saved_findings))
+    return 0
 
 
 def cmd_lint(args) -> int:
@@ -1019,7 +1061,7 @@ def cmd_import(args) -> int:
         if it.kind == "group":
             it.size = list(it._geo[2:])
     out = Path(args.out)
-    out.write_text(dump_yaml(m))
+    out.write_text(dump_yaml(m), encoding="utf-8")
     print(f"wrote {out} ({len(m.items)} items, {len(m.edges)} edges)")
     return 0
 
@@ -1118,7 +1160,7 @@ def cmd_edit(args) -> int:
     elif op == "relayout":
         for it in (m.walk([args.id]) if args.id else m.items.values()):
             it.pos = it.size = None
-    path.write_text(dump_yaml(m))
+    path.write_text(dump_yaml(m), encoding="utf-8")
     print(f"updated {path}")
     return 0
 

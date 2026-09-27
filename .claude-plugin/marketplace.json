@@ -9,6 +9,11 @@
   },
   "plugins": [
     {
+      "name": "aws-architecture",
+      "source": "./plugins/aws-architecture",
+      "description": "AWS の構成図 (ブロック図) を、編集できる draw.io ファイル (.drawio) として設計・作図し、AWS 公式アイコンとグループ規約 (AWS Cloud ⊃ Region ⊃ VPC ⊃ AZ ⊃ Subnet) と構成の定石 (DB を private に置く、Multi-AZ、NAT の置き場所など) をスクリプトで検証し、PNG を別モデルに批評させる差し戻しループで仕上げる。「AWS の構成図を作って」「アーキテクチャ図」「インフラ構成図」「システム構成図」「この構成を図にして」「〜なアーキテクチャを設計して図にして」「drawio で AWS」と言われたら、形式が指定されていなくてもこのスキルを使う。既存の .drawio の AWS 図の手直し・規約チェック・レビュー (「この構成図おかしくない?」「AWS のお作法に沿ってる?」) や、AWS アイコンが読めない・足りないという相談にも使う。AWS 以外の汎用フローチャートや、AWS が出てこないネットワーク図は drawio スキルに回す。"
+    },
+    {
       "name": "aws-icons",
       "source": "./plugins/aws-icons",
       "description": "AWSアイコンパッケージZIP（Icon-package_*.zip）を受け取り、draw.io用SVGライブラリ（mxlibrary形式のXML）に変換して保存する。ユーザーが「新しいAWSアイコンZIPを取り込んで」「icon-package…zipをdrawio用にして」「AWSアイコンをdraw.ioで使えるようにしたい」などと言ったとき、またはIcon-package_*.zipのパスを渡されたときは必ずこのスキルを使うこと。"
@@ -31,7 +36,7 @@
     {
       "name": "nogikun",
       "source": "./",
-      "description": "Skills: aws-drawio-import, claat-creator, html-deck, usable-xlsm"
+      "description": "Skills: arch-builder, aws-drawio-import, claat-creator, html-deck, usable-xlsm"
     }
   ]
 }

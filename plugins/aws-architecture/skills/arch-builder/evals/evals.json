@@ -1,0 +1,140 @@
+{
+  "skill_name": "arch-builder",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "東京リージョンで、ECS on Fargate と Aurora MySQL の本番用 Web アプリ構成を設計して drawio で図にして。前段は CloudFront + WAF、静的ファイルは S3。2AZ構成で、アプリからの外向き通信は NAT 経由。設計レビューで使う。",
+      "expected_output": "arch.yaml / .drawio / .png。公式アイコン、正しい入れ子、2AZ対称、NATはpublic、Auroraはprivate、CloudFront/WAFはRegion外、S3はVPC外。lint error 0。",
+      "files": [],
+      "assertions": [
+        {
+          "type": "machine",
+          "text": "編集可能な .drawio と確認用 PNG と .arch.yaml が出力されている"
+        },
+        {
+          "type": "machine",
+          "text": "arch lint で error が 0 件"
+        },
+        {
+          "type": "machine",
+          "text": "arch lint で A-* と N-EDGE-* の warn が 0 件 (残すなら報告に理由がある)"
+        },
+        {
+          "type": "design",
+          "text": "最終版の PNG に対する批評が記録され、pass している (未解決の should は報告に並んでいる)"
+        },
+        {
+          "type": "legibility",
+          "text": "PNG だけを見て、線の行き先を取り違える箇所が無い (無関係な要素の脇を通る線、逆向きの矢印、重なった線)"
+        },
+        {
+          "type": "design",
+          "text": "2 AZ が横に並び、各 AZ に public / private (app, db) subnet がある"
+        },
+        {
+          "type": "design",
+          "text": "IGW は VPC の上辺の線の上、NAT は各 AZ の public subnet、Aurora は DB subnet"
+        },
+        {
+          "type": "design",
+          "text": "CloudFront と WAF は Region の外、S3 は VPC の外"
+        },
+        {
+          "type": "design",
+          "text": "報告に Asset Package の日付と、確認した AWS 情報 (無ければ「なし」) がある"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "API Gateway + Lambda + DynamoDB のサーバーレス構成を AWS 構成図にしてほしい。認証は Cognito、注文受付後の重い処理は SQS に積んで別の Lambda で非同期に処理、結果は SNS でメール通知。VPC は使わない。",
+      "expected_output": "VPC を描かず、リージョンサービスを Region 直下に配置した図。非同期の流れが破線などで区別されている。lint error 0。",
+      "files": [],
+      "assertions": [
+        {
+          "type": "machine",
+          "text": "編集可能な .drawio と確認用 PNG と .arch.yaml が出力されている"
+        },
+        {
+          "type": "machine",
+          "text": "arch lint で error が 0 件"
+        },
+        {
+          "type": "machine",
+          "text": "arch lint で A-* と N-EDGE-* の warn が 0 件 (残すなら報告に理由がある)"
+        },
+        {
+          "type": "design",
+          "text": "最終版の PNG に対する批評が記録され、pass している (未解決の should は報告に並んでいる)"
+        },
+        {
+          "type": "legibility",
+          "text": "PNG だけを見て、線の行き先を取り違える箇所が無い (無関係な要素の脇を通る線、逆向きの矢印、重なった線)"
+        },
+        {
+          "type": "design",
+          "text": "VPC が描かれていない"
+        },
+        {
+          "type": "design",
+          "text": "API Gateway / Lambda x2 / DynamoDB / Cognito / SQS / SNS がすべて公式アイコンで描かれている"
+        },
+        {
+          "type": "legibility",
+          "text": "非同期の流れ (SQS 経由) が、同期の流れと線種で区別されている"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "evals/files/flawed.drawio は社内業務システムの構成図なんだけど、AWS のお作法的におかしくない？おかしいところを直した版を作って、何を直したか教えて。本番なので冗長化も考えて。",
+      "expected_output": "取り込んで lint の指摘 (NAT が private、RDS/EC2 が public、S3 が VPC 内、ALB が AZ 内、IGW なし、1 AZ) を直した図と、直した点の説明。",
+      "files": [
+        "evals/files/flawed.drawio"
+      ],
+      "assertions": [
+        {
+          "type": "machine",
+          "text": "編集可能な .drawio と確認用 PNG と .arch.yaml が出力されている"
+        },
+        {
+          "type": "machine",
+          "text": "arch lint で error が 0 件"
+        },
+        {
+          "type": "machine",
+          "text": "arch lint で A-* と N-EDGE-* の warn が 0 件 (残すなら報告に理由がある)"
+        },
+        {
+          "type": "design",
+          "text": "最終版の PNG に対する批評が記録され、pass している (未解決の should は報告に並んでいる)"
+        },
+        {
+          "type": "legibility",
+          "text": "PNG だけを見て、線の行き先を取り違える箇所が無い (無関係な要素の脇を通る線、逆向きの矢印、重なった線)"
+        },
+        {
+          "type": "design",
+          "text": "NAT を public に、RDS と EC2 を private に移している"
+        },
+        {
+          "type": "design",
+          "text": "S3 を VPC の外に出している"
+        },
+        {
+          "type": "design",
+          "text": "2 AZ を横に並べ、ALB を AZ の外に置き、IGW を VPC の上辺の線の上に追加している"
+        },
+        {
+          "type": "design",
+          "text": "社内システムの入り方 (インターネット公開か社内限定か) を前提として図の notes と報告に書いている"
+        },
+        {
+          "type": "design",
+          "text": "report.md が直した点を一つずつ説明している"
+        }
+      ]
+    }
+  ],
+  "protocol": "evals/README.md を参照。1 プロンプト × 1 条件あたり 3 回。type ごとに採点者を分ける"
+}

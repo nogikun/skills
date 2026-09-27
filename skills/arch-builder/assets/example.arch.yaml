@@ -1,0 +1,95 @@
+# arch.yaml の見本: 東京リージョンの 3 層 Web (2 AZ)。書式は references/spec.md
+#
+# 配置の型 (Web ページの ヘッダー / ボディ / フッター にたとえる):
+# - ヘッダー: VPC の上部に ALB。入口のゲートウェイ (IGW) は VPC の上辺の線の上 (VPC 直下に置けば自動で乗る)
+# - ボディ: AZ を横に並べる。各 AZ の中は public → app → data を上から下へ積む (各 AZ で同じ順・同じ数)
+# - フッター: 外へ出す口 (VPN Gateway など) は VPC の下辺の線の上
+# - 流れ: VPC の外は左 → 右、VPC の中は上 → 下。各アイコンは入口と出口が向かい合い、線が一直線に通り抜ける
+# - VPC の外の入口 (CloudFront など) は、リージョンの上の段に置く。リージョンの見出しと同じ高さに置くと、IGW へ向かう線が見出しを避けて大回りする
+# - ALB からの線は AZ の間を下りてきて、各 AZ へ枝分かれする
+title: 3層Webアプリ (東京)
+items:
+  - id: users
+    icon: Users
+    label: 利用者
+  - id: cloud
+    group: aws-cloud
+    layout: column
+    children:
+      - id: edge
+        group: layout
+        children:
+          - {id: cf, icon: Amazon CloudFront, label: CloudFront}
+      - id: tokyo
+        group: region
+        label: ap-northeast-1 (東京)
+        layout: row
+        children:
+          - id: vpc
+            group: vpc
+            label: VPC 10.0.0.0/16
+            layout: column
+            children:
+              - {id: igw, icon: Internet Gateway, label: Internet Gateway}
+              - {id: alb, icon: ALB, label: ALB}
+              - id: azs
+                group: layout
+                layout: row
+                children:
+                  - id: az-a
+                    group: az
+                    label: AZ ap-northeast-1a
+                    layout: column
+                    children:
+                      - id: pub-a
+                        group: public-subnet
+                        label: Public 10.0.0.0/24
+                        children:
+                          - {id: nat-a, icon: NAT Gateway, label: NAT Gateway}
+                      - id: app-a
+                        group: private-subnet
+                        label: App 10.0.10.0/24
+                        children:
+                          - {id: ecs-a, icon: AWS Fargate, label: "Fargate\nAPI"}
+                      - id: db-a
+                        group: private-subnet
+                        label: DB 10.0.20.0/24
+                        children:
+                          - {id: rds-a, icon: Amazon Aurora, label: "Aurora\nWriter"}
+                  - id: az-c
+                    group: az
+                    label: AZ ap-northeast-1c
+                    layout: column
+                    children:
+                      - id: pub-c
+                        group: public-subnet
+                        label: Public 10.0.1.0/24
+                        children:
+                          - {id: nat-c, icon: NAT Gateway, label: NAT Gateway}
+                      - id: app-c
+                        group: private-subnet
+                        label: App 10.0.11.0/24
+                        children:
+                          - {id: ecs-c, icon: AWS Fargate, label: "Fargate\nAPI"}
+                      - id: db-c
+                        group: private-subnet
+                        label: DB 10.0.21.0/24
+                        children:
+                          - {id: rds-c, icon: Amazon Aurora, label: "Aurora\nReader"}
+          - id: s3
+            icon: S3
+            label: "S3\n静的アセット"
+edges:
+  - {from: users, to: cf, label: HTTPS}
+  - {from: cf, to: igw}
+  - {from: cf, to: s3, label: OAC}
+  - {from: igw, to: alb}
+  - {from: alb, to: ecs-a}
+  - {from: alb, to: ecs-c}
+  - {from: ecs-a, to: nat-a}      # 外向き。中 → 外 (逆方向): 点対称の面を使う。行きと同じ面に乗る分はスロットで分かれる
+  - {from: ecs-c, to: nat-c}
+  - {from: nat-a, to: igw}
+  - {from: nat-c, to: igw}
+  - {from: ecs-a, to: rds-a}
+  - {from: ecs-c, to: rds-a}
+  - {from: rds-a, to: rds-c, label: レプリケーション, dashed: true}

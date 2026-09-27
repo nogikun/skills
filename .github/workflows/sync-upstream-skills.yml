@@ -31,6 +31,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python3 .github/scripts/sync_plugins.py | tee "$RUNNER_TEMP/found.tsv"
 
+      # sync が消した plugins/*/plugin.json と marketplace を作り直す。
+      # version は渡さず既存の値を維持する
+      - name: marketplace を書き出す
+        run: npx -y github:nogikun/skill-mart#v1.0.0
+
       - name: PR の本文を組み立てる
         run: |
           set -euo pipefail

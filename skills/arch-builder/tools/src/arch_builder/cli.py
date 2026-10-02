@@ -242,6 +242,7 @@ class Model:
     problems: list = field(default_factory=list)  # 読み込み時点の問題 (code, msg, id)
     from_drawio: bool = False  # True なら box は draw.io 上の実座標 (自動配置し直さない)
     notes: list = field(default_factory=list)  # 図の下に書く前提・注記 (「社員はインターネット経由で入る」など)
+    page_aspect: float | None = None  # 任意の用紙比率。未指定なら 16:9
 
     def ancestors(self, iid: str):
         p = self.items[iid].parent
@@ -258,6 +259,18 @@ class Model:
 def load_yaml(path: Path, lib: Library | None) -> Model:
     doc = yaml.safe_load(path.read_text(encoding="utf-8-sig")) or {}
     m = Model(doc.get("title", path.stem), {}, [], [], lib)
+    raw_aspect = doc.get("page_aspect")
+    if raw_aspect is not None:
+        try:
+            if isinstance(raw_aspect, bool):
+                raise ValueError
+            m.page_aspect = float(raw_aspect)
+        except (TypeError, ValueError):
+            m.problems.append(("E-PAGE-ASPECT", "page_aspect は 1.0〜2.2 の数値で指定", None))
+        else:
+            if not 1.0 <= m.page_aspect <= 2.2:
+                m.problems.append(("E-PAGE-ASPECT", "page_aspect は 1.0〜2.2 の範囲で指定", None))
+                m.page_aspect = None
 
     def add(raw: dict, parent: str | None):
         iid = str(raw.get("id") or "")
@@ -346,6 +359,8 @@ def dump_yaml(m: Model) -> str:
                 d[k] = getattr(e, k)
         edges.append(d)
     doc = {"title": m.title, "items": [ser(r) for r in m.roots], "edges": edges}
+    if m.page_aspect is not None:
+        doc["page_aspect"] = m.page_aspect
     if m.notes:
         doc["notes"] = m.notes
     return yaml.safe_dump(doc, sort_keys=False, allow_unicode=True, width=120, default_flow_style=None)
@@ -674,19 +689,21 @@ def edge_style(e: Edge) -> str:
     return s + ("dashed=1;" if e.dashed else "")
 
 
-def to_drawio(m: Model) -> str:
+def to_drawio(m: Model, *, layout_done: bool = False) -> str:
     if not m.lib:
         raise SystemExit("アイコンライブラリが必要 (doctor を実行)")
-    layout(m)
+    if not layout_done:
+        layout(m)
     mxfile = ET.Element("mxfile", host="arch-builder")
     diagram = ET.SubElement(mxfile, "diagram", id="arch", name=m.title)
-    # 用紙は図全体を含む 16:9 にする (スライドや画面にそのまま貼れるように)
+    # 用紙は図全体を含み、既定は16:9。必要なら arch.yaml で比率を指定できる。
     right = max((m.items[r].box[0] + m.items[r].box[2] for r in m.roots), default=0) + 40
     bottom = max((m.items[r].box[1] + m.items[r].box[3] for r in m.roots), default=0) + 40 + 24 * bool(m.notes)
-    pw = max(right, bottom * 16 / 9)
+    aspect = m.page_aspect or 16 / 9
+    pw = max(right, bottom * aspect)
     model = ET.SubElement(diagram, "mxGraphModel", dx="1400", dy="900", grid="1", gridSize="10", guides="1",
                           tooltips="1", connect="1", arrows="1", fold="1", page="1", pageScale="1",
-                          pageWidth=_f(pw), pageHeight=_f(pw * 9 / 16),
+                          pageWidth=_f(pw), pageHeight=_f(pw / aspect),
                           background="#FFFFFF", math="0", shadow="0", darkMode="0")
     root = ET.SubElement(model, "root")
     ET.SubElement(root, "mxCell", id="0")
@@ -785,6 +802,14 @@ def load_drawio(path: Path, lib: Library | None) -> Model:
     g = read_graph(path)
     diagram = ET.parse(path).getroot().find("diagram")
     m = Model(diagram.get("name", path.stem) if diagram is not None else path.stem, {}, [], [], lib)
+    graph = g
+    if graph is not None and graph.get("pageWidth") and graph.get("pageHeight"):
+        try:
+            aspect = float(graph.get("pageWidth")) / float(graph.get("pageHeight"))
+        except (ValueError, ZeroDivisionError):
+            aspect = None
+        if aspect is not None and 1.0 <= aspect <= 2.2:
+            m.page_aspect = round(aspect, 4)
     m.from_drawio = True  # 座標は draw.io 上の実物。lint で自動配置し直さない
     cells = []  # (id, attrs, mxCell)
     for el in g.find("root"):
@@ -1017,7 +1042,7 @@ def cmd_build(args) -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".drawio", dir=out.parent, delete=False) as f:
         temp = Path(f.name)
-        f.write(to_drawio(m))
+        f.write(to_drawio(m, layout_done=True))
     try:
         saved_findings = lint(load_drawio(temp, lib), layout_first=False)
         signature = lambda fs: sorted((x.severity, x.code, x.id or "") for x in fs)  # noqa: E731
@@ -1046,7 +1071,10 @@ def cmd_lint(args) -> int:
         print(json.dumps([f.__dict__ for f in findings], ensure_ascii=False, indent=2))
     else:
         print(report(findings))
-    return 1 if any(f.severity == "error" for f in findings) else 0
+    strict_codes = {"N-EDGE-CROSS", "N-EDGE-TOUCH", "N-EDGE-OVERLAP", "N-EDGE-UNCHECKED"}
+    failed = any(f.severity == "error" for f in findings) or (
+        args.strict_geometry and any(f.code in strict_codes for f in findings))
+    return 1 if failed else 0
 
 
 def cmd_import(args) -> int:
@@ -1189,6 +1217,8 @@ def main(argv=None) -> int:
     s = sub.add_parser("lint", help="arch.yaml / .drawio を AWS 規約で検証する")
     s.add_argument("target")
     s.add_argument("--json", action="store_true")
+    s.add_argument("--strict-geometry", action="store_true",
+                   help="線の交差・接触・重複、検査不能な経路があれば失敗する")
     s = sub.add_parser("import", help=".drawio -> arch.yaml (draw.io での手直しを正本に戻す)")
     s.add_argument("drawio")
     s.add_argument("-o", "--out", required=True)

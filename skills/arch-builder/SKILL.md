@@ -101,6 +101,7 @@ doctor は取り込んだ **Asset Package の日付**も出す。報告に書く
   `security-group` / `auto-scaling` / `account` / `corporate-dc` / `generic` など。一覧は spec.md)
 - 子を持つ `generic` はまとまりの枠、ラベル付きで線につながる空の `generic` は外部端点としてコンパクトな実線箱になる。未接続の空 group は lint 警告になる
 - 並べ方を整えるための箱は `group: layout` にする。枠は描かれず、入れ子の規約チェックでも無いものとして扱われる
+- 写真や帳票に合わせた用紙比率が必要なら、`page_aspect` を使う (指定範囲・既定値は `references/spec.md`)
 - 図は **Web ページのヘッダー / ボディ / フッター**で組む。ヘッダーの上 (VPC 上辺) に IGW、ヘッダーに ALB、
   ボディに AZ を横並び (各 AZ の中は public → app → data を上から下)、フッター (VPC 下辺) に外へ出す口。
   各アイコンは入口と出口が向かい合い (VPC の中は上→下、外は左→右)、ALB からの線は AZ の間を下りて T 字に分かれる。
@@ -120,9 +121,11 @@ build は UTF-8 (BOM 付きも可) の arch.yaml を読み、生成した一時 
 
 ```bash
 uv run --project "<SKILL>/tools" arch lint <slug>.drawio        # 実物の .drawio を検査する
+uv run --project "<SKILL>/tools" arch lint <slug>.drawio --strict-geometry  # 交差・接触・重複・検査不能な線があれば失敗
 ```
 
 - `error` (N-*: 作図規約) は **全部直す**。1件でも残っていたら、批評にも納品にも進まない
+- 納品前は `--strict-geometry` も実行する。交差・端点接触・重複経路・経路を復元できない線が1件でもあれば終了コードが 1 になる
 - `warn` (A-*: 構成の定石) は直すのが基本。意図があって残すなら、その理由を報告に書く (例: 検証環境なので 1 AZ)
 - 各ルールの意味と根拠は `references/aws-conventions.md`。直し方は出力の `→` の行にある
 - **納品する `.drawio` 自体を、最後の編集の後に lint する**。build 時の lint 結果を流用しない。`N-PORT-FACE` / `N-PORT-SLOT`、`N-EDGE-*`、`N-NODE-UNCONNECTED` は、最終図で残っていないことを確認する。残す警告は報告に理由を書く

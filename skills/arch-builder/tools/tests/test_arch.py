@@ -53,16 +53,19 @@ def test_icon_aliases_resolve_to_official_names():
     assert LIB.resolve("no such service") is None
 
 
-def test_example_is_clean(tmp_path):
+def test_example_only_has_known_findings(tmp_path, capsys):
     m = cli.load_yaml(EXAMPLE, LIB)
     found = [f for f in lint(m, layout_first=True) if f.severity != "info"]
     assert not [f for f in found if f.severity == "error"]
-    # 既知の残り: NAT → IGW の戻りの線は、IGW の真下に ALB があるため曲がりが多く ALB の脇を通る (配置の課題として残す)
+    # 既知の残り: ALB の共有幹と NAT → IGW が1箇所で交差し、NAT → IGW は曲がりが多く ALB の脇を通る。
     assert {(f.code, f.id) for f in found} <= {("N-EDGE-BENDS", "nat-a"), ("N-EDGE-BENDS", "nat-c"),
-                                               ("N-EDGE-NEAR-NODE", "nat-a"), ("N-EDGE-NEAR-NODE", "nat-c")}
+                                               ("N-EDGE-NEAR-NODE", "nat-a"), ("N-EDGE-NEAR-NODE", "nat-c"),
+                                               ("N-EDGE-CROSS", None)}
+    assert cli.main(["lint", str(EXAMPLE), "--strict-geometry"]) == 1
+    capsys.readouterr()
 
 
-def test_utf8_yaml_build_preserves_flow_and_saved_lint(tmp_path, capsys):
+def test_utf8_yaml_build_preserves_flow_and_saved_lint(tmp_path, capsys, monkeypatch):
     p = spec(tmp_path, [{"id": "cloud", "group": "aws-cloud", "children": [
         {"id": "region", "group": "region", "label": "ap-northeast-1", "children": [
                     {"id": "vpc", "group": "vpc", "label": "VPC layout round-trip regression fixture for retained flow direction and explicit port settings", "flow": "right", "children": [
@@ -73,12 +76,58 @@ def test_utf8_yaml_build_preserves_flow_and_saved_lint(tmp_path, capsys):
     p.write_text("\ufeff" + p.read_text(encoding="utf-8"), encoding="utf-8")
     out = tmp_path / "図.drawio"
 
+    route_calls = []
+    route = cli.route
+    def tracked_route(model):
+        route_calls.append(model)
+        return route(model)
+
+    monkeypatch.setattr(cli, "route", tracked_route)
     assert cli.main(["build", str(p), "-o", str(out)]) == 0
+    assert len(route_calls) == 1
     assert "wrote" in capsys.readouterr().out
     saved = cli.load_drawio(out, LIB)
     assert saved.items["vpc"].flow == saved.items["subnet"].flow == "right"
     assert (saved.edges[0].exit, saved.edges[0].entry) == ("right", "left")
     assert not [f for f in lint(saved) if f.code.startswith("N-PORT-")]
+
+
+@pytest.mark.parametrize("aspect", [4 / 3, 1.77, 1.78, 16 / 9])
+def test_page_aspect_override_builds_and_survives_import(tmp_path, aspect):
+    p = tmp_path / "page.arch.yaml"
+    p.write_text(yaml.safe_dump({"title": "page", "page_aspect": aspect,
+                                 "items": [{"id": "user", "icon": "Users", "label": "User"},
+                                           {"id": "app", "icon": "AWS Lambda", "label": "App"}],
+                                 "edges": [{"from": "user", "to": "app"}]}), encoding="utf-8")
+    model = cli.load_yaml(p, LIB)
+    graph = ET.fromstring(cli.to_drawio(model)).find("./diagram/mxGraphModel")
+    assert float(graph.get("pageWidth")) / float(graph.get("pageHeight")) == pytest.approx(aspect, abs=1e-3)
+
+    drawio = tmp_path / "page.drawio"
+    drawio.write_text(cli.to_drawio(model), encoding="utf-8")
+    imported = cli.load_drawio(drawio, LIB)
+    assert imported.page_aspect == pytest.approx(aspect, abs=1e-3)
+    assert yaml.safe_load(cli.dump_yaml(imported))["page_aspect"] == pytest.approx(aspect, abs=1e-3)
+
+    exported = tmp_path / "imported.arch.yaml"
+    rebuilt = tmp_path / "rebuilt.drawio"
+    assert cli.main(["import", str(drawio), "-o", str(exported)]) == 0
+    assert yaml.safe_load(exported.read_text(encoding="utf-8"))["page_aspect"] == pytest.approx(aspect, abs=1e-3)
+    assert cli.main(["build", str(exported), "-o", str(rebuilt)]) == 0
+    rebuilt_graph = cli.read_graph(rebuilt)
+    for dimension in ("pageWidth", "pageHeight"):
+        assert rebuilt_graph.get(dimension) == graph.get(dimension)
+
+    p.write_text(yaml.safe_dump({"title": "page", "items": [{"id": "user", "icon": "Users", "label": "User"}],
+                                 "edges": []}), encoding="utf-8")
+    default_graph = ET.fromstring(cli.to_drawio(cli.load_yaml(p, LIB))).find("./diagram/mxGraphModel")
+    assert float(default_graph.get("pageWidth")) / float(default_graph.get("pageHeight")) == pytest.approx(16 / 9, abs=1e-3)
+
+
+def test_invalid_page_aspect_is_an_error(tmp_path):
+    p = tmp_path / "bad-page.arch.yaml"
+    p.write_text(yaml.safe_dump({"page_aspect": 0.8, "items": [], "edges": []}), encoding="utf-8")
+    assert ("E-PAGE-ASPECT", None) in codes(cli.load_yaml(p, LIB))
 
 
 def test_build_preserves_existing_output_when_saved_lint_differs(tmp_path, monkeypatch):
@@ -173,13 +222,17 @@ def test_hand_edit_in_drawio_is_checked(tmp_path):
 
 
 def test_compressed_drawio_is_readable(tmp_path):
-    xml = cli.to_drawio(cli.load_yaml(EXAMPLE, LIB))
-    model = re.search(r"<mxGraphModel.*</mxGraphModel>", xml, re.S).group(0)
+    model = cli.load_yaml(EXAMPLE, LIB)
+    model.page_aspect = 4 / 3
+    xml = cli.to_drawio(model)
+    xml_model = re.search(r"<mxGraphModel.*</mxGraphModel>", xml, re.S).group(0)
     c = zlib.compressobj(9, zlib.DEFLATED, -15)
-    packed = base64.b64encode(c.compress(urllib.parse.quote(model).encode()) + c.flush()).decode()
+    packed = base64.b64encode(c.compress(urllib.parse.quote(xml_model).encode()) + c.flush()).decode()
     p = tmp_path / "z.drawio"
     p.write_text(f'<mxfile><diagram id="a" name="z">{packed}</diagram></mxfile>', encoding="utf-8")
-    assert len(cli.load_drawio(p, LIB).items) == len(cli.load_yaml(EXAMPLE, LIB).items)
+    imported = cli.load_drawio(p, LIB)
+    assert len(imported.items) == len(model.items)
+    assert imported.page_aspect == pytest.approx(4 / 3, abs=1e-3)
 
 
 def test_edit_ops(tmp_path):
@@ -221,6 +274,68 @@ def test_shared_trunk_does_not_hide_overlapping_labels(tmp_path):
     m = cli.load_yaml(row_of_three(tmp_path, label="HTTPS"), LIB)
     m.edges.append(copy.deepcopy(m.edges[0]))
     assert ("N-EDGE-LABEL-OVERLAP", "a") in codes(m)
+
+
+def test_edge_crossing_is_reported_even_for_shared_trunk_pair(tmp_path):
+    m = cli.load_yaml(row_of_three(tmp_path), LIB)
+    cli.layout(m)
+    a, b = m.edges[0], copy.deepcopy(m.edges[0])
+    a.path = [(0, 0), (40, 0)]
+    b.path = [(20, -20), (20, 20)]
+    m.edges.append(b)
+    assert sum(f.code == "N-EDGE-CROSS" for f in lint(m)) == 1
+
+
+def test_edge_endpoint_contact_is_reported(tmp_path):
+    nodes = [{"id": "g", "group": "generic", "children": [
+        {"id": name, "icon": "Amazon EC2", "label": name.upper()} for name in "abcd"]}]
+    m = cli.load_yaml(spec(tmp_path, nodes, [{"from": "a", "to": "b"}, {"from": "c", "to": "d"}]), LIB)
+    cli.layout(m)
+    a, b = m.edges
+    a.path = [(0, 0), (40, 0)]
+    b.path = [(20, 0), (20, 40)]  # T 字接触 (線の端が別の線の途中に当たる)
+    assert any(f.code == "N-EDGE-TOUCH" for f in lint(m))
+
+
+def test_bbox_prefilter_keeps_near_parallel_edge_overlap(tmp_path):
+    nodes = [{"id": "g", "group": "generic", "children": [
+        {"id": name, "icon": "Amazon EC2", "label": name.upper()} for name in "abcd"]}]
+    m = cli.load_yaml(spec(tmp_path, nodes, [{"from": "a", "to": "c"}, {"from": "b", "to": "d"}]), LIB)
+    m.edges[0].path = [(0, 0), (100, 0)]
+    m.edges[1].path = [(0, 7), (100, 7)]
+    assert any(f.code == "N-EDGE-OVERLAP" for f in lint(m))
+
+
+def test_crossing_inside_shared_source_icon_is_not_reported(tmp_path):
+    m = cli.load_yaml(row_of_three(tmp_path), LIB)
+    cli.layout(m)
+    a, b = m.edges[0], copy.deepcopy(m.edges[0])
+    x, y, w, h = cli.route_box(m.items[a.src]).icon
+    cx, cy = x + w / 2, y + h / 2
+    a.path = [(cx - 10, cy), (cx + 10, cy)]
+    b.path = [(cx, cy - 10), (cx, cy + 10)]
+    m.edges.append(b)
+    assert not [f for f in lint(m) if f.code == "N-EDGE-CROSS"]
+
+
+def test_strict_geometry_lint_rejects_unchecked_route(tmp_path, capsys):
+    nodes = [{"id": "g", "group": "generic", "children": [
+        {"id": name, "icon": "Amazon EC2", "label": name.upper()} for name in "abcd"]}]
+    m = cli.load_yaml(spec(tmp_path, nodes, [{"from": "a", "to": "b"}, {"from": "c", "to": "d"}]), LIB)
+    path = tmp_path / "unchecked.drawio"
+    path.write_text(cli.to_drawio(m), encoding="utf-8")
+    graph = cli.read_graph(path)
+    edge = next(c for c in graph.findall(".//mxCell") if c.get("edge") == "1")
+    edge.set("style", ";".join(x for x in edge.get("style", "").split(";")
+                                  if not x.startswith(("exitX=", "entryX="))))
+    mxfile = ET.Element("mxfile")
+    ET.SubElement(mxfile, "diagram", id="unchecked", name="unchecked").append(graph)
+    path.write_bytes(ET.tostring(mxfile, encoding="utf-8", xml_declaration=True))
+
+    assert cli.main(["lint", str(path)]) == 0
+    capsys.readouterr()
+    assert cli.main(["lint", str(path), "--strict-geometry"]) == 1
+    assert "N-EDGE-UNCHECKED" in capsys.readouterr().out
 
 
 def test_edge_through_a_node_is_an_error(tmp_path):

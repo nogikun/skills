@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from arch_builder.cli import (GROUPS, ICON, LAYOUT_ONLY, STRETCH_MAX, SUBNETS, Model, edge_class, group_need, on_border,
                               plan_ports, group_headers, label_size, layout, route_box)
-from arch_builder.route import (_near_collinear, blocked, label_hits, label_rect, near_obstacles, obstacles_of,
+from arch_builder.route import (_cross, _near_collinear, blocked, label_hits, label_rect, near_obstacles, obstacles_of,
                                 crosses_label, passes_near, path_hits, rects_overlap, shares_trunk)
 
 SEV_ORDER = {"error": 0, "warn": 1, "info": 2}
@@ -52,6 +52,36 @@ BASTION = re.compile(r"bastion|踏み台|jump", re.I)
 def _word(name: str, words) -> bool:
     n = " " + re.sub(r"[^a-z0-9]+", " ", name.lower()) + " "
     return any(f" {w} " in n for w in words)
+
+
+def _touch_point(a, b):
+    """直交線分が交わるが、両方の内部で交差するわけではない接点を返す。"""
+    (p, q), (r, s) = a, b
+    ah, bh = abs(p[1] - q[1]) < 0.5, abs(r[1] - s[1]) < 0.5
+    if ah == bh:
+        if ah and abs(p[1] - r[1]) < 0.5:
+            lo = max(min(p[0], q[0]), min(r[0], s[0]))
+            hi = min(max(p[0], q[0]), max(r[0], s[0]))
+            return (lo, (p[1] + r[1]) / 2) if lo == hi else None
+        if not ah and abs(p[0] - r[0]) < 0.5:
+            lo = max(min(p[1], q[1]), min(r[1], s[1]))
+            hi = min(max(p[1], q[1]), max(r[1], s[1]))
+            return ((p[0] + r[0]) / 2, lo) if lo == hi else None
+        return None
+    h, v = (a, b) if ah else (b, a)
+    x0, x1 = sorted((h[0][0], h[1][0]))
+    y0, y1 = sorted((v[0][1], v[1][1]))
+    x, y = v[0][0], h[0][1]
+    return (x, y) if x0 <= x <= x1 and y0 <= y <= y1 else None
+
+
+def _segment_bounds(segment, pad=8):
+    (x1, y1), (x2, y2) = segment
+    return min(x1, x2) - pad, min(y1, y2) - pad, max(x1, x2) + pad, max(y1, y2) + pad
+
+
+def _bounds_disjoint(a, b):
+    return a[2] < b[0] or b[2] < a[0] or a[3] < b[1] or b[3] < a[1]
 
 
 def lint(m: Model, layout_first: bool = False) -> list[Finding]:
@@ -272,16 +302,49 @@ def lint(m: Model, layout_first: bool = False) -> list[Finding]:
                     "内容 (ラベル・線種) が違う線は面を 2n+1 等分した偶数番目の中央から別々に、同じ内容の線は同じ位置から出す")
     # 重なり: 幹を共有してよいのは、同じ内容で端点を共有する線だけ
     routed = [e for e in m.edges if e.path]
+    # ponytail: O(S^2) geometry checks took 2.7 ms at 74 segments; use sweep-line only if they exceed 100 ms in profiling.
+    routed_segments = [[(segment, _segment_bounds(segment)) for segment in zip(e.path, e.path[1:])] for e in routed]
+    crossings = {}
+    # ponytail: conservative 8px-expanded bounds keep exact predicates while skipping distant segment pairs.
     for a_i, a in enumerate(routed):
-        for b in routed[a_i + 1:]:
-            if shares_trunk(a.src, a.dst, edge_class(a), b.src, b.dst, edge_class(b)):
-                continue
-            if any(_near_collinear(s1, s2) for s1 in zip(a.path, a.path[1:]) for s2 in zip(b.path, b.path[1:])):
+        a_segments = routed_segments[a_i]
+        for b_i in range(a_i + 1, len(routed)):
+            b = routed[b_i]
+            shared_icons = [route_box(m.items[i]).icon for i in {a.src, a.dst} & {b.src, b.dst}
+                            if i in m.items and m.items[i].kind == "node"]
+            shared_route = shares_trunk(a.src, a.dst, edge_class(a), b.src, b.dst, edge_class(b))
+            crossing_points = set()
+            overlap = False
+            for sa, ba in a_segments:
+                for sb, bb in routed_segments[b_i]:
+                    if _bounds_disjoint(ba, bb):
+                        continue
+                    is_crossing = bool(_cross(sa, sb)[0])
+                    point = None if is_crossing else _touch_point(sa, sb)
+                    if is_crossing or (point is not None and not shared_route):
+                        code = "N-EDGE-CROSS" if is_crossing else "N-EDGE-TOUCH"
+                        if is_crossing:
+                            ah = abs(sa[0][1] - sa[1][1]) < 0.5
+                            h, v = (sa, sb) if ah else (sb, sa)
+                            point = (v[0][0], h[0][1])
+                        # 共有端点ノードのアイコン内は、線が図形の背面で隠れるため交差に数えない。
+                        if not any(x <= point[0] <= x + w and y <= point[1] <= y + h
+                                   for x, y, w, h in shared_icons):
+                            crossing_points.add((code, round(point[0], 2), round(point[1], 2)))
+                    if not shared_route:
+                        overlap |= _near_collinear(sa, sb)
+            for code, x, y in crossing_points:
+                crossings.setdefault((code, x, y), set()).update((f"{a.src} -> {a.dst}", f"{b.src} -> {b.dst}"))
+            if overlap:
                 add("warn", "N-EDGE-OVERLAP", a.src, f"線 {a.src} -> {a.dst} と {b.src} -> {b.dst} が重なって走っている",
                     "内容が違う線は重ねない。並び順を変えるか、ラベルをそろえて同じ内容として束ねる")
         if not a.dashed and len(a.path) - 2 > 2:
             add("warn", "N-EDGE-BENDS", a.src, f"線 {a.src} -> {a.dst} が {len(a.path) - 2} 回曲がっている (2 回まで)",
                 "線でつながる相手どうしを、流れの向き (VPC の中は上→下、外は左→右) に並べ直す")
+    for (code, x, y), edges_at_point in sorted(crossings.items()):
+        kind = "内部交差" if code == "N-EDGE-CROSS" else "端点接触"
+        add("warn", code, None, f"経路 {', '.join(sorted(edges_at_point))} が座標 ({x:g}, {y:g}) で{kind}している",
+            "接続先を明示するか、線が接触しない経路になるよう配置か接続口を変える")
     if unchecked:
         add("info", "N-EDGE-UNCHECKED", None, f"経路が draw.io 任せの線が {unchecked} 本あり、横切りを検査できない",
             "arch import → arch build で経路を引き直すと検査できる")

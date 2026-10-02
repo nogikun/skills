@@ -147,7 +147,24 @@ def find_stray_excel(before: set[int]) -> set[int]:
 
 def excel_pids() -> set[int]:
     """PIDs of every Excel process currently running."""
-    return find_stray_excel(set())
+    return find_stray_excel(set()) if sys.platform == "win32" else set()
+
+
+def _wait_for_excel_exit(pid: int, timeout_ms: int = 5000) -> bool:
+    """Wait for our Excel process to exit after the worker releases COM."""
+    import pywintypes
+    import win32api
+    import win32con
+    import win32event
+
+    try:
+        handle = win32api.OpenProcess(win32con.SYNCHRONIZE, False, pid)
+    except pywintypes.error as exc:
+        return exc.winerror == 87  # ERROR_INVALID_PARAMETER: PID already exited.
+    try:
+        return win32event.WaitForSingleObject(handle, timeout_ms) == win32event.WAIT_OBJECT_0
+    finally:
+        win32api.CloseHandle(handle)
 
 
 def _run_job_unlocked(
@@ -348,6 +365,16 @@ def _run_job_unlocked(
             error_code=payload.get("error_code") or "excel_worker_error",
         )
 
+    try:
+        exited = bool(payload.get("excel_pid")) and _wait_for_excel_exit(int(payload["excel_pid"]))
+    except Exception:
+        exited = False
+    if not exited:
+        return JobResult(ok=False, error="Could not confirm owned Excel shutdown; refusing a successful job result.",
+            error_code="excel_cleanup_failed", duration=time.monotonic() - started, job_id=job_id,
+            excel_pid=payload.get("excel_pid"), office_version=payload.get("office_version"))
+
+    duration = time.monotonic() - started
     return JobResult(
         ok=True,
         data=payload.get("data"),
@@ -369,6 +396,11 @@ def run_job(
 ) -> JobResult:
     """Run one owned Excel job while holding the host-wide serialization lock."""
     job_id = str(fields.pop("job_id", uuid.uuid4().hex))
+    if sys.platform != "win32":
+        return JobResult(
+            ok=False, job_id=job_id, error_code="excel_backend_unavailable",
+            error="Automated update/test/run requires Windows desktop Excel. Continue with extract/check/plan/create on this host and hand off runtime validation to a Windows worker.",
+        )
     try:
         with excel_host_lock(job_id):
             return _run_job_unlocked(

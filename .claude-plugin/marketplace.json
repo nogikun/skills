@@ -31,7 +31,7 @@
     {
       "name": "usable-xlsm",
       "source": "./plugins/usable-xlsm",
-      "description": "Safely inspect, edit, test, and release VBA and workbook-object changes in trusted .xlsm/.xlsb/.xltm workbooks on a dedicated Windows Excel worker. Use for VBA or macro-enabled workbook development, repair, review, regression testing, and controlled promotion. Do not use for plain .xlsx data work, arbitrary untrusted Office files, or server-side concurrent Office automation."
+      "description": "Inspect, create, repair, and statically validate macro-enabled Excel workbooks and VBA on Windows, macOS, and Linux. Use for .xlsm/.xlsb/.xltm development, incremental VBA changes, portability review, and regression testing. Preserve the dedicated Windows Excel worker for automated editing, macro execution, and atomic release. Do not use for plain .xlsx data work or untrusted macro execution."
     },
     {
       "name": "nogikun",

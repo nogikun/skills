@@ -13,6 +13,7 @@ from scribe import audio, cli, pipeline  # noqa: E402
 from scribe.audio import SR, pick_samples  # noqa: E402
 from scribe.backends import normalize  # noqa: E402
 from scribe.export import EXPORTERS, build_doc  # noqa: E402
+from scribe import merge as merge_mod  # noqa: E402
 from scribe.merge import merge  # noqa: E402
 
 DIAR = [{"speaker_id": "SPEAKER_00", "start": 0.0, "end": 10.0},
@@ -101,9 +102,9 @@ def test_rename_refreshes_exported_files():
         cmd_speaker_rename(argparse.Namespace(job="t2", pairs=["SPEAKER_00"]))
 
 
-@pytest.mark.parametrize("missing,rerun", [("audio.wav", ["diarize", "transcribe"]),
-                                          ("diarization.json", ["diarize"]),
-                                          ("transcript.json", ["transcribe"]),
+@pytest.mark.parametrize("missing,rerun", [("audio.wav", ["diarize", "transcribe", "fill"]),
+                                          ("diarization.json", ["diarize", "fill"]),
+                                          ("transcript.json", ["transcribe", "fill"]),
                                           ("merged.json", []), ("samples/SPEAKER_00.wav", [])])
 def test_pipeline_invalidates_only_dependencies_and_honors_device(missing, rerun):
     job = J.create(__file__)
@@ -119,6 +120,7 @@ def test_pipeline_invalidates_only_dependencies_and_honors_device(missing, rerun
         boundary = 12.0 if changed else 10.0
         rows = ([{"speaker_id": "SPEAKER_00", "start": 0.0, "end": boundary},
                  {"speaker_id": "SPEAKER_01", "start": boundary, "end": 20.0}] if kind == "diarize" else
+                [] if kind == "fill" else  # gap re-transcription finds nothing more here
                 [{"start": 10.5, "end": 11.5, "text": "new" if changed else "old", "words": []}])
         J.write_json(out, rows)
         return {"backend": f"fake/{options['device']}"}
@@ -149,7 +151,7 @@ def test_pipeline_invalidates_only_dependencies_and_honors_device(missing, rerun
         calls.clear()
         opts = pipeline.resolve_opts(job, {"device": "cuda"})
         pipeline.run(job, opts)
-        assert calls == ["diarize", "transcribe"]
+        assert calls == ["diarize", "transcribe", "fill"]
         assert all(job["stages"][s]["backend"] == "fake/cuda" for s in calls)
         calls.clear()
         pipeline.run(job, opts)
@@ -186,9 +188,9 @@ def test_failed_reprocessing_cannot_export_old_results(stage):
         # Files can survive an interruption between saving invalidation and deleting them.
         J.write_json(d / "diarization.json", DIAR)
         J.write_json(d / "speakers.json", {"SPEAKER_00": "Old person"})
-        assert cli._speakers(J.load(job["job_id"])) == []
+        assert cli.speakers(J.load(job["job_id"])) == []
         with pytest.raises(J.ScribeError, match="no completed diarization"):
-            cli._apply_names(job["job_id"], {"SPEAKER_00": "Wrong person"})
+            cli.apply_names(job["job_id"], {"SPEAKER_00": "Wrong person"})
 
 
 def test_export_paths_are_all_refreshed_with_legacy_jobs_and_write_failures():
@@ -206,7 +208,7 @@ def test_export_paths_are_all_refreshed_with_legacy_jobs_and_write_failures():
     assert len(J.load(jid)["exports"]["markdown"]) == 3  # repeated path is registered once
     third.unlink()
     third.mkdir()  # one unwritable target must not prevent updating the other two
-    result = cli._apply_names(jid, {"SPEAKER_00": "Alice", "SPEAKER_01": "Bob"})
+    result = cli.apply_names(jid, {"SPEAKER_00": "Alice", "SPEAKER_01": "Bob"})
     assert result["refreshed"] == [str(first.resolve()), str(second.resolve())]
     assert all("Alice" in path.read_text(encoding="utf-8") for path in (first, second))
     assert len(J.load(jid)["exports"]["markdown"]) == 2
@@ -246,6 +248,21 @@ def test_commands_load_validate_and_render_after_lock():
         return original_lock(job_id)
 
     with patch.object(J, "lock", concurrent_rediarization), pytest.raises(J.ScribeError, match="not in"):
-        cli._apply_names(jid, {"SPEAKER_00": "Wrong person"})
+        cli.apply_names(jid, {"SPEAKER_00": "Wrong person"})
     with pytest.raises(J.ScribeError, match="job not found"):
         cli.cmd_export(cli._parser().parse_args(["export", "missing-job"]))
+
+
+def test_uncovered_finds_speech_without_text_and_fill_recovers_it():
+    diar = [{"speaker_id": "SPEAKER_00", "start": 0.0, "end": 27.8},
+            {"speaker_id": "SPEAKER_01", "start": 28.4, "end": 31.2},
+            {"speaker_id": "SPEAKER_01", "start": 32.0, "end": 32.7},  # under MIN_GAP: not flagged
+            {"speaker_id": "SPEAKER_01", "start": 33.5, "end": 40.2},
+            {"speaker_id": "SPEAKER_00", "start": 42.4, "end": 48.9}]
+    asr = [{"start": 0.0, "end": 27.7, "text": "a"}, {"start": 42.1, "end": 48.6, "text": "b"}]
+    gaps = merge_mod.uncovered(diar, asr)
+    assert [(g["speaker_id"], g["start"], g["end"]) for g in gaps] == [
+        ("SPEAKER_01", 28.4, 31.2), ("SPEAKER_01", 33.5, 40.2)]
+    assert merge_mod.clips(gaps, 40.3) == [[28.1, 31.5], [33.2, 40.3]]
+    filled = asr + [{"start": 28.3, "end": 31.0, "text": "c"}, {"start": 33.5, "end": 40.0, "text": "d"}]
+    assert merge_mod.uncovered(diar, filled) == []

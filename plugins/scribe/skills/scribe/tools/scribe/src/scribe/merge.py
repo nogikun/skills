@@ -3,6 +3,10 @@
 import bisect
 
 MAX_GAP = 1.0  # beyond this distance from any speaker turn -> speaker_id None
+# ponytail: tuned on one news clip (Whisper skipped a 10 s interview inside its 30 s window). Shorter
+# untranscribed bits are mostly backchannels/noise; lower it if real short replies go missing.
+MIN_GAP = 1.5  # s of diarized speech with no text that counts as "not transcribed"
+CLIP_PAD = 0.3  # s of context around each re-transcribed gap
 
 
 class _Index:
@@ -41,3 +45,38 @@ def merge(transcript: list[dict], diarization: list[dict]) -> list[dict]:
     for m in out:
         m["text"] = m["text"].strip()
     return [m for m in out if m["text"]]
+
+
+def _union(spans) -> list[list[float]]:
+    out = []
+    for a, b in sorted(spans):
+        if out and a <= out[-1][1]:
+            out[-1][1] = max(out[-1][1], b)
+        else:
+            out.append([a, b])
+    return out
+
+
+def uncovered(diarization: list[dict], segments: list[dict], min_gap: float = MIN_GAP) -> list[dict]:
+    """Diarized speech that no ASR segment overlaps: [{speaker_id, start, end}] pieces >= min_gap s."""
+    cov = _union((s["start"], s["end"]) for s in segments)
+    ends = [b for _, b in cov]
+    out = []
+    for t in sorted(diarization, key=lambda t: t["start"]):
+        cur = t["start"]
+        for a, b in cov[bisect.bisect_right(ends, t["start"]):]:
+            if a >= t["end"]:
+                break
+            if a - cur >= min_gap:
+                out.append({"speaker_id": t["speaker_id"], "start": round(cur, 3), "end": round(a, 3)})
+            cur = max(cur, b)
+        if t["end"] - cur >= min_gap:
+            out.append({"speaker_id": t["speaker_id"], "start": round(cur, 3), "end": round(t["end"], 3)})
+    return out
+
+
+def clips(gaps: list[dict], duration: float | None = None) -> list[list[float]]:
+    """Padded, merged [start, end] spans to re-transcribe."""
+    end = duration if duration else float("inf")
+    return [[round(a, 3), round(b, 3)] for a, b in
+            _union((max(0.0, g["start"] - CLIP_PAD), min(end, g["end"] + CLIP_PAD)) for g in gaps)]

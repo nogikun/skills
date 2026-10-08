@@ -1,4 +1,4 @@
-"""Stage runner: cache keys, backend fallback chain, child processes with timeout."""
+"""Stage runner: cache keys, backend fallback chain, child processes with timeout, run queue."""
 
 import json
 import logging
@@ -7,9 +7,11 @@ import shutil
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
-from . import audio, backends, inputs, merge
+from . import audio, backends, inputs, merge, progress
+from . import job as J
 from .job import STAGES, ScribeError, job_dir, read_json, save, write_json
 
 log = logging.getLogger("scribe")
@@ -20,21 +22,78 @@ DEFAULTS = {"diarizer": "nemotron,pyannote,sherpa", "asr": "faster-whisper", "mo
             "device": "auto", "num_speakers": None, "cluster_threshold": 1.0, "stage_timeout": None}
 
 
-def _stage(job, name, key, outputs, fn) -> bool:
+class Paused(Exception):
+    """The user paused this job (web UI) while a stage was running; the stage's partial work is dropped."""
+
+
+class Runner:
+    """Holds the machine-wide runner slot across this job's stages. At each stage boundary it gives the
+    slot up if the user paused this job or put another waiting job ahead of it, then waits for its turn."""
+
+    def __init__(self, job_id: str):
+        self.job_id, self.slot = job_id, None
+
+    def turn(self) -> None:
+        if self.slot and not self._must_yield():
+            return
+        self.close()
+        said, d = None, job_dir(self.job_id)
+        while True:
+            paused = J.control(self.job_id).get("paused")
+            progress.context(d / "progress.json", state="paused" if paused else "queued", stage=None, attempt=None)
+            if not paused:
+                line = [w for w in J.waiting() if w["state"] == "queued"]
+                if (not line or line[0]["job_id"] == self.job_id) and (slot := J.try_runner()):
+                    self.slot = slot
+                    return
+            msg = "paused: waiting to be resumed in the web UI" if paused else "queued: waiting for other jobs"
+            if msg != said:
+                log.info(msg)
+                said = msg
+            time.sleep(1)
+
+    def _must_yield(self) -> bool:
+        if J.control(self.job_id).get("paused"):
+            return True
+        line = [w for w in J.waiting() if w["state"] == "queued"]
+        return bool(line) and line[0]["order"] < J.control(self.job_id).get("order", 0)
+
+    def close(self) -> None:
+        if self.slot:
+            self.slot.close()
+            self.slot = None
+
+
+def _stage(job, name, key, outputs, fn, runner: Runner | None = None) -> bool:
     """Run fn unless a completed result with the same key exists. Returns True if it ran."""
     st = job["stages"].get(name, {})
     step = f"[{STAGES.index(name) + 1}/{len(STAGES)}] {name}"
     if st.get("status") == "completed" and st.get("key") == key and all(p.exists() for p in outputs):
         log.info("%s: cached", step)
         return False
+    while True:
+        if runner:
+            runner.turn()
+        try:
+            return _attempt(job, name, key, fn, step)
+        except Paused:
+            job["stages"].pop(name, None)  # partial work is gone; resume reruns the stage from its start
+            save(job)
+            log.info("%s: paused, partial work discarded", step)
+
+
+def _attempt(job, name, key, fn, step) -> bool:
     log.info("%s: start", step)
-    affected = [name, *{"audio": ["diarize", "transcribe", "merge", "samples"],
-                       "diarize": ["merge", "samples"], "transcribe": ["merge"]}.get(name, [])]
+    affected = [name, *{"audio": ["diarize", "transcribe", "fill", "merge", "samples"],
+                       "diarize": ["fill", "merge", "samples"], "transcribe": ["fill", "merge"],
+                       "fill": ["merge"]}.get(name, [])]
     for downstream in affected[1:]:
         job["stages"].pop(downstream, None)
     if "merge" in affected:
         job.pop("exports", None)
     job["stages"][name] = {"status": "running", "key": key}
+    progress.context(job_dir(job["job_id"]) / "progress.json", stage=name, attempt=None, state="running",
+                     started_at=datetime.now(timezone.utc).isoformat())
     save(job)
     t = time.monotonic()
     try:
@@ -42,7 +101,7 @@ def _stage(job, name, key, outputs, fn) -> bool:
         if "diarize" in affected:
             (d / "speakers.json").unlink(missing_ok=True)
         artifacts = {"audio": "audio.wav", "diarize": "diarization.json", "transcribe": "transcript.json",
-                     "merge": "merged.json", "samples": "samples"}
+                     "fill": "fill.json", "merge": "merged.json", "samples": "samples"}
         for stage in affected:
             path = d / artifacts[stage]
             if stage == "samples":
@@ -51,6 +110,8 @@ def _stage(job, name, key, outputs, fn) -> bool:
             else:
                 path.unlink(missing_ok=True)
         extra = fn() or {}
+    except Paused:
+        raise
     except Exception as e:
         job["stages"][name].update(status="failed", error=str(e))
         save(job)
@@ -74,14 +135,24 @@ def _run_chain(kind, chain, wav, out: Path, opts, timeout):
             err = Path(str(out) + ".err")
             err.unlink(missing_ok=True)
             log.info("%s: trying %s (%s)", kind, name, dev)
+            progress.context(attempt=f"{name}/{dev}")
             cmd = [sys.executable, "-m", "scribe.backends", kind, name, str(wav), str(out),
                    json.dumps({**opts, "device": dev})]
-            try:
-                # stdout=2: child chatter goes to our stderr, keeping stdout clean for results
-                rc = subprocess.run(cmd, stdout=2, timeout=timeout).returncode
-                reason = err.read_text(encoding="utf-8") if err.exists() else f"crashed (exit {rc})"
-            except subprocess.TimeoutExpired:  # run() kills the child
+            # stdout=2: child chatter goes to our stderr, keeping stdout clean for results
+            p, end = subprocess.Popen(cmd, stdout=2), time.monotonic() + timeout
+            while (rc := p.poll()) is None:
+                paused = J.read_json(out.parent / "control.json", {}).get("paused")  # out lives in the job dir
+                if paused or time.monotonic() > end:
+                    p.kill()
+                    p.wait()
+                    if paused:
+                        raise Paused()
+                    break
+                time.sleep(0.5)
+            if rc is None:
                 rc, reason = -1, f"timeout after {timeout}s"
+            else:
+                reason = err.read_text(encoding="utf-8") if err.exists() else f"crashed (exit {rc})"
             if rc == 0:
                 return {"backend": f"{name}/{dev}", "attempts": attempts}
             log.warning("%s: %s (%s) %s", kind, name, dev, reason)
@@ -91,9 +162,18 @@ def _run_chain(kind, chain, wav, out: Path, opts, timeout):
 
 
 def run(job: dict, opts: dict) -> None:
+    runner = Runner(job["job_id"])
+    try:
+        _run(job, opts, runner)
+    finally:
+        runner.close()
+        progress.clear()
+
+
+def _run(job: dict, opts: dict, runner: Runner) -> None:
     d = job_dir(job["job_id"])
-    wav, diar, tr, merged, samples = (d / "audio.wav", d / "diarization.json", d / "transcript.json",
-                                      d / "merged.json", d / "samples")
+    wav, diar, tr, fill, merged, samples = (d / "audio.wav", d / "diarization.json", d / "transcript.json",
+                                            d / "fill.json", d / "merged.json", d / "samples")
     src = Path(job["input"])
     if not src.exists():
         raise ScribeError("input_not_found", f"input not found: {src}", 2)
@@ -105,7 +185,7 @@ def run(job: dict, opts: dict) -> None:
         job["duration"] = info.pop("duration")
         return info  # format / kind / converter, kept in stages.audio
 
-    _stage(job, "audio", k_audio, [wav], do_audio)
+    _stage(job, "audio", k_audio, [wav], do_audio, runner)
     timeout = opts["stage_timeout"] or max(600, 4 * job.get("duration", 0))
 
     dchain = opts["diarizer"].split(",")
@@ -113,16 +193,28 @@ def run(job: dict, opts: dict) -> None:
               "cluster_threshold": opts["cluster_threshold"],
               "versions": backends.versions(dchain)}
 
-    _stage(job, "diarize", k_diar, [diar], lambda: _run_chain("diarize", dchain, wav, diar, opts, timeout))
+    _stage(job, "diarize", k_diar, [diar], lambda: _run_chain("diarize", dchain, wav, diar, opts, timeout), runner)
 
     achain = opts["asr"].split(",")
     k_asr = {"up": k_audio, "chain": achain, "device": opts["device"], "model": opts["model"], "language": opts["language"],
              "versions": backends.versions(achain)}
-    _stage(job, "transcribe", k_asr, [tr], lambda: _run_chain("transcribe", achain, wav, tr, opts, timeout))
+    _stage(job, "transcribe", k_asr, [tr], lambda: _run_chain("transcribe", achain, wav, tr, opts, timeout), runner)
 
-    k_merge = {"diar": k_diar, "asr": k_asr, "max_gap": merge.MAX_GAP}
+    def do_fill():  # re-transcribe diarized speech the full pass left without text
+        gaps = merge.uncovered(read_json(diar), read_json(tr))
+        spans = merge.clips(gaps, job.get("duration"))
+        if not spans:
+            write_json(fill, [])
+            return {"clips": 0}
+        extra = _run_chain("fill", achain, wav, fill, {**opts, "clips": spans}, timeout)
+        return {**extra, "clips": len(spans), "gap_seconds": round(sum(g["end"] - g["start"] for g in gaps), 1)}
 
-    _stage(job, "merge", k_merge, [merged], lambda: write_json(merged, merge.merge(read_json(tr), read_json(diar))))
+    k_fill = {"diar": k_diar, "asr": k_asr, "min_gap": merge.MIN_GAP, "pad": merge.CLIP_PAD}
+    _stage(job, "fill", k_fill, [fill], do_fill, runner)
+
+    k_merge = {"fill": k_fill, "max_gap": merge.MAX_GAP}
+    _stage(job, "merge", k_merge, [merged], lambda: write_json(merged, merge.merge(
+        sorted(read_json(tr) + read_json(fill), key=lambda s: s["start"]), read_json(diar))), runner)
 
     def do_samples():
         samples.mkdir()
@@ -135,7 +227,7 @@ def run(job: dict, opts: dict) -> None:
     k_samples = {"diar": k_diar, "params": [audio.SAMPLE_MIN, audio.SAMPLE_MAX, audio.JOIN_GAP]}
     sample_outputs = [samples / "samples.json", *(samples / f"{spk}.wav"
                       for spk in {s["speaker_id"] for s in read_json(diar)})]
-    _stage(job, "samples", k_samples, sample_outputs, do_samples)
+    _stage(job, "samples", k_samples, sample_outputs, do_samples, runner)
 
 
 def resolve_opts(job: dict, given: dict) -> dict:

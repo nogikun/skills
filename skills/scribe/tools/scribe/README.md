@@ -25,6 +25,7 @@ uv run scribe speaker rename --job <job> SPEAKER_00=田中 SPEAKER_01=佐藤
 uv run scribe export <job> --format markdown      # json|markdown|txt|srt|vtt(webvtt), -o FILE
 uv run scribe jobs                                # ジョブ一覧 (新しい順)
 uv run scribe process --job <job>                 # 中断したジョブを再開
+uv run scribe serve                               # 進捗モニタと話者エディタ (http://127.0.0.1:8765/)
 uv run pytest
 ```
 

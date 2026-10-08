@@ -1,22 +1,24 @@
 """Scribe CLI. stdout = results only, stderr = logs. Exit: 0 ok, 1 error, 2 bad args, 3 processing failed, 4 user input required."""
 
 import argparse
+import hashlib
 import json
 import logging
 import os
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 from . import job as J
-from . import pipeline
+from . import merge, pipeline
 from .export import EXPORTERS, build_doc
 
 log = logging.getLogger("scribe")
 
 
-def _speakers(job: dict) -> list[dict]:
+def speakers(job: dict) -> list[dict]:
     if job["stages"].get("diarize", {}).get("status") != "completed":
         return []
     d = J.job_dir(job["job_id"])
@@ -26,27 +28,61 @@ def _speakers(job: dict) -> list[dict]:
     talk = {}
     for s in J.read_json(d / "diarization.json", []):
         talk[s["speaker_id"]] = talk.get(s["speaker_id"], 0) + s["end"] - s["start"]
-    merged = (J.read_json(d / "merged.json", [])
-              if job["stages"].get("merge", {}).get("status") == "completed" else [])
+    merged = J.segments(job["job_id"]) if job["stages"].get("merge", {}).get("status") == "completed" else []
 
     def said(spk, span):  # what the speaker says inside the sample (for whoever can't listen)
         return "".join(m["text"] for m in merged if m["speaker_id"] == spk
                        and m["end"] > span[0] and m["start"] < span[1]) if span else None
 
+    # seconds of each speaker's speech left without text, counted like the warnings (pieces >= MIN_GAP):
+    # counting every sub-second pause inside a diarized turn would make good transcripts look bad
+    missing = {}
+    for g in merge.uncovered(J.read_json(d / "diarization.json", []), merged) if merged else []:
+        missing[g["speaker_id"]] = missing.get(g["speaker_id"], 0) + g["end"] - g["start"]
+
     return [{"speaker_id": s, "name": names.get(s), "speech_seconds": round(talk[s], 1),
+             "transcribed_ratio": round(1 - missing.get(s, 0) / talk[s], 2) if merged and talk[s] else None,
              "sample_audio": str(d / "samples" / f"{s}.wav") if s in spans else None,
              "sample_span": spans.get(s), "sample_text": said(s, spans.get(s))}
             for s in J.speaker_ids(job["job_id"])]
 
 
-def _summary(job: dict) -> dict:
-    out = {"job_id": job["job_id"], "status": J.status(job), "input": job["input"],
+def summary(job: dict, locked: bool | None = None) -> dict:
+    out = {"job_id": job["job_id"], "status": J.status(job, locked), "input": job["input"],
            "duration": job.get("duration"), "options": job.get("options"),
            "stages": {n: {k: v for k, v in s.items() if k != "key"} for n, s in job["stages"].items()},
            "exports": job.get("exports", {})}
     if out["status"] == "speaker_identification_required":
-        out["speakers"] = [s for s in _speakers(job) if not s["name"]]
+        out["speakers"] = [s for s in speakers(job) if not s["name"]]
+    if q := J.queue_state(job["job_id"]):
+        out["queue"] = q
+    out["warnings"] = []
+    if lost := lost_edits(job):
+        out["warnings"].append({"code": "text_edits_lost", "count": len(lost),
+                                "message": f"{len(lost)} hand-corrected line(s) no longer exist after reprocessing"})
+    if gaps := untranscribed(job):
+        secs = round(sum(g["end"] - g["start"] for g in gaps), 1)
+        out["warnings"] += [{"code": "untranscribed_speech", "seconds": secs, "spans": gaps,
+                            "message": f"{secs}s of diarized speech has no text (gaps were re-transcribed once)"}]
+    if not out["warnings"]:
+        del out["warnings"]
     return out
+
+
+def lost_edits(job: dict) -> list[str]:
+    """Corrections whose line is gone (merge redone with other inputs): kept on disk, no longer applied."""
+    if job["stages"].get("merge", {}).get("status") != "completed":
+        return []
+    keys = {J.seg_key(s) for s in J.read_json(J.job_dir(job["job_id"]) / "merged.json", [])}
+    return [k for k in J.text_edits(job["job_id"]) if k not in keys]
+
+
+def untranscribed(job: dict) -> list[dict]:
+    """Coverage check: diarized speech (>= merge.MIN_GAP s) that ended up without any text."""
+    if job["stages"].get("merge", {}).get("status") != "completed":
+        return []
+    d = J.job_dir(job["job_id"])
+    return merge.uncovered(J.read_json(d / "diarization.json", []), J.segments(job["job_id"]))
 
 
 def cmd_process(a):
@@ -65,6 +101,7 @@ def cmd_process(a):
             raise J.ScribeError("input_mismatch", f"job {a.job} was created for {job['input']}", 2)
         opts = pipeline.resolve_opts(job, given)
         J.save(job)
+        J.set_control(job_id, paused=False, order=time.time())  # a new run joins the back of the queue
         try:
             pipeline.run(job, opts)
         except J.ScribeError:
@@ -72,7 +109,7 @@ def cmd_process(a):
         except Exception as e:
             log.exception("processing failed")
             raise J.ScribeError("processing_failed", f"{type(e).__name__}: {e}", 3)
-        out = _summary(job)
+        out = summary(job)
     return out, 4 if out["status"] == "speaker_identification_required" else 0
 
 
@@ -86,39 +123,72 @@ def cmd_jobs(a):
 
 
 def cmd_status(a):
-    return _summary(J.load(a.job)), 0
+    return summary(J.load(a.job)), 0
 
 
 def cmd_speakers(a):
     job = J.load(a.job)
-    return {"job_id": job["job_id"], "status": J.status(job), "speakers": _speakers(job)}, 0
+    return {"job_id": job["job_id"], "status": J.status(job), "speakers": speakers(job)}, 0
 
 
-def _render(job: dict, fmt: str) -> str:
+def render(job: dict, fmt: str) -> str:
     d = J.job_dir(job["job_id"])
-    doc = build_doc(job["job_id"], job.get("duration"), J.read_json(d / "merged.json"), J.speaker_names(job["job_id"]))
+    doc = build_doc(job["job_id"], job.get("duration"), J.segments(job["job_id"]), J.speaker_names(job["job_id"]))
     return EXPORTERS[fmt](doc)
 
 
-def _apply_names(job_id: str, updates: dict) -> dict:
-    """Save speaker names, then rewrite every file exported earlier so it carries the new names."""
+def diarize_tag(job: dict) -> str | None:
+    """Changes whenever diarization is redone (SPEAKER_xx may then mean someone else)."""
+    st = job["stages"].get("diarize", {})
+    if st.get("status") != "completed":
+        return None
+    return hashlib.sha1(json.dumps(st.get("key"), sort_keys=True).encode()).hexdigest()[:12]
+
+
+def apply_names(job_id: str, updates: dict, expect_tag: str | None = None) -> dict:
+    return apply_edits(job_id, updates, None, expect_tag)
+
+
+def apply_edits(job_id: str, names: dict | None, texts: dict | None, expect_tag: str | None = None) -> dict:
+    """Save speaker names and/or corrected line texts ({seg_key: text}, "" = drop the line), then rewrite
+    every file exported earlier so it carries them. expect_tag: refuse (stale) if diarization changed
+    since the caller loaded the job."""
+    names, texts = names or {}, texts or {}
     with J.lock(job_id):
         job = J.load(job_id)
+        d = J.job_dir(job_id)
         if job["stages"].get("diarize", {}).get("status") != "completed":
             raise J.ScribeError("not_processed", f"job {job_id} has no completed diarization yet", 1)
+        if expect_tag is not None and diarize_tag(job) != expect_tag:
+            raise J.ScribeError("stale", f"job {job_id} was re-diarized; reload the speakers", 1)
         ids = J.speaker_ids(job_id)
-        if bad := [s for s in updates if s not in ids]:
+        if bad := [s for s in names if s not in ids]:
             raise J.ScribeError("unknown_speaker", f"{bad} not in {ids}", 2)
-        names = J.speaker_names(job_id)
-        names.update({s: (n or "").strip() or None for s, n in updates.items()})
-        J.write_json(J.job_dir(job_id) / "speakers.json", names)
+        if texts:
+            if job["stages"].get("merge", {}).get("status") != "completed":
+                raise J.ScribeError("not_processed", f"job {job_id} has no merged transcript yet", 1)
+            original = {J.seg_key(s): s["text"] for s in J.read_json(d / "merged.json", [])}
+            if bad := [k for k in texts if k not in original]:
+                raise J.ScribeError("stale", f"lines {bad[:3]} no longer exist (reprocessed?); reload", 1)
+            edits = J.text_edits(job_id)
+            for k, t in texts.items():
+                t = t.strip()
+                if t == original[k]:
+                    edits.pop(k, None)  # back to what the ASR said
+                else:
+                    edits[k] = t
+            J.write_json(d / "edits.json", edits)
+        speaker_names = J.speaker_names(job_id)
+        if names:
+            speaker_names.update({s: (n or "").strip() or None for s, n in names.items()})
+            J.write_json(d / "speakers.json", speaker_names)
         refreshed = []
         for fmt, entries in list(job.get("exports", {}).items()):
             for e in list(entries):
                 try:
                     if not e.get("path"):
                         raise OSError("printed to stdout")  # nothing on disk to update
-                    Path(e["path"]).write_text(_render(job, fmt), encoding="utf-8")
+                    Path(e["path"]).write_text(render(job, fmt), encoding="utf-8")
                     e["at"] = datetime.now(timezone.utc).isoformat()
                     refreshed.append(e["path"])
                 except OSError:
@@ -126,19 +196,19 @@ def _apply_names(job_id: str, updates: dict) -> dict:
             if not entries:
                 del job["exports"][fmt]
         J.save(job)
-    return {"job_id": job_id, "status": J.status(job), "names": {s: names.get(s) for s in ids},
-            "refreshed": refreshed}
+    return {"job_id": job_id, "status": J.status(job), "names": {s: speaker_names.get(s) for s in ids},
+            "texts": J.text_edits(job_id), "refreshed": refreshed}
 
 
 def cmd_speaker_set(a):
-    return _apply_names(a.job, {a.speaker: a.name}), 0
+    return apply_names(a.job, {a.speaker: a.name}), 0
 
 
 def cmd_speaker_rename(a):
     pairs = [p.split("=", 1) for p in a.pairs]
     if any(len(p) != 2 for p in pairs):
         raise J.ScribeError("invalid_argument", "use SPEAKER_00=名前 pairs", 2)
-    return _apply_names(a.job, dict(pairs)), 0
+    return apply_names(a.job, dict(pairs)), 0
 
 
 def _play(path: str) -> None:
@@ -160,7 +230,7 @@ def cmd_speaker_edit(a):
     say = lambda t: print(t, file=sys.stderr)  # noqa: E731
     say("Enter=そのまま  -=名前を消す  p=もう一度再生")
     updates = {}
-    for s in sorted(_speakers(job), key=lambda s: -s["speech_seconds"]):
+    for s in sorted(speakers(job), key=lambda s: -s["speech_seconds"]):
         say(f"\n{s['speaker_id']}  発話 {s['speech_seconds']}s  現在: {s['name'] or '(未設定)'}")
         say(f"  「{s['sample_text'] or ''}」")
         while True:
@@ -175,7 +245,17 @@ def cmd_speaker_edit(a):
             updates[s["speaker_id"]] = None
         elif ans:
             updates[s["speaker_id"]] = ans
-    return _apply_names(a.job, updates), 0
+    return apply_names(a.job, updates), 0
+
+
+def cmd_serve(a):
+    from . import server
+
+    def ready(url):
+        _print({"url": url}, a.json)
+        sys.stdout.flush()
+    server.serve(a.host, a.port, ready)
+    return None, 0
 
 
 def cmd_export(a):
@@ -183,7 +263,7 @@ def cmd_export(a):
         job = J.load(a.job)
         if job["stages"].get("merge", {}).get("status") != "completed":
             raise J.ScribeError("not_processed", f"job {a.job} has no merged transcript yet (status: {J.status(job)})", 1)
-        text = _render(job, a.format)
+        text = render(job, a.format)
         path = str(Path(a.output).resolve()) if a.output else None
         if a.output:
             Path(path).write_text(text, encoding="utf-8")
@@ -253,6 +333,11 @@ def _parser():
     s.add_argument("--format", choices=sorted(EXPORTERS), default="markdown")
     s.add_argument("-o", "--output", help="write to file instead of stdout")
     s.set_defaults(fn=cmd_export)
+
+    s = sub.add_parser("serve", parents=[common], help="Local web UI: job monitor + speaker editor")
+    s.add_argument("--host", default="127.0.0.1")
+    s.add_argument("--port", type=int, default=8765)
+    s.set_defaults(fn=cmd_serve)
     return p
 
 

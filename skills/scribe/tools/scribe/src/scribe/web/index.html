@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scribe</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%234e79a7'/%3E%3Cpath d='M4 5h8M4 8h8M4 11h5' stroke='white' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<aside id="sidebar">
+  <header class="side-head">
+    <h1>Scribe</h1>
+    <span id="conn" class="conn" role="status" aria-live="polite">接続中…</span>
+  </header>
+  <ul id="jobs" aria-label="ジョブ一覧"></ul>
+  <p id="empty" class="empty" hidden>ジョブはまだありません。<code>scribe process</code> を実行すると、ここに表示されます。</p>
+  <footer id="home" class="side-foot" title="scribe process と scribe serve が同じフォルダ (SCRIBE_HOME) を使っているときだけ、処理が表示されます"></footer>
+</aside>
+<main id="main"><p class="placeholder">左のジョブを選んでください。</p></main>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

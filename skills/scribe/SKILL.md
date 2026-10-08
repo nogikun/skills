@@ -40,6 +40,20 @@ uv sync --project <skill>/tools/scribe --extra nemotron                 # macOS
 
 ## 基本の流れ
 
+### 0. 画面を開く (使える環境なら)
+
+アプリ内ブラウザ (Claude デスクトップの Browser pane など) が使えるなら、処理の前に Web UI を起動して開いておく。ジョブ一覧・処理の流れ・全体の進捗 (%) がリアルタイムに見え、話者名もトラック表示で付けられる。
+
+```bash
+scribe serve --json        # 常駐するのでバックグラウンドで実行。stdout の url を読む
+```
+
+- `url` (既定 `http://127.0.0.1:8765/`) をアプリ内ブラウザで開く。特定のジョブは `<url>#/job/<ID>` (Workflow タブ)、話者の確認と名前付けは `<url>#/job/<ID>/speakers` (Preview タブ)。
+- 既に起動していれば `error: port_in_use` になる。その URL をそのまま開けばよい (別のポートが要るなら `--port`)。
+- 画面は `SCRIBE_HOME` のファイルを読むだけなので、どこから `process` を実行しても自動で表示される。ブラウザが使えない環境ではこの手順を飛ばす。
+- 画面から処理は開始できない。処理の開始・再開は今までどおり CLI で行う。
+- **処理は 1 件ずつ順番に実行される** (GPU/CPU を取り合わないため)。複数の `process` を同時に起動すると、後のものは前のものが終わるまで待つ。ユーザーは画面のジョブ一覧を右クリックして「一時停止」「再開」「最優先にする」「削除」ができる (削除はジョブのフォルダだけで、書き出したファイルと元ファイルは残る)。一時停止中・待機中も `process` は終了せずに待ち続ける (stderr に `queued:` / `paused:`、`status` の `queue` に状態が出る) ので、止まって見えても kill しない。一時停止すると実行中の段階は破棄され、再開時にその段階の最初からやり直す。
+
 ### 1. 処理する
 
 ```bash
@@ -59,6 +73,8 @@ scribe process "<入力ファイル>" --job <分かりやすいID> --json
 | `0` / `ready` | 全員に名前がある | 手順 4 |
 | `3` / `failed` | 処理失敗 | 下の「トラブル対応」 |
 
+どの場合も、結果 JSON に `warnings` があれば確認する。`untranscribed_speech` は「話者分離では声があるのに文字が付いていない区間」が残っていることを示す (`spans` に話者と時刻)。Whisper は 30 秒窓の中で発話をまるごと飛ばすことがあるため、処理の `fill` ステージがそうした区間だけを個別に文字起こし直して埋めており、それでも残ったものだけがここに出る。BGM や効果音を話者分離が声と誤検出した場合もあるので、ユーザーに「この時刻に文字の無い発話があります」と伝え、Web UI の Preview (赤い区間・赤字の行) で聞いて確かめてもらう。`speakers` の `transcribed_ratio` が低い話者も同じ理由で要注意。
+
 ### 3. 話者に名前を付ける (人間に確認する)
 
 `process` の JSON (または `scribe speakers <ID> --json`) の `speakers` に、話者ごとの情報がある:
@@ -77,7 +93,9 @@ scribe speaker rename --job <ID> SPEAKER_00=田中 SPEAKER_01=佐藤 --json
 
 (1 人だけなら `scribe speaker set --job <ID> --speaker SPEAKER_00 --name 田中 --json` でもよい。空の名前 `SPEAKER_00=` は名前の取り消し。)
 
-ユーザーが自分で音声を聞きながら付けたい場合は、ユーザーの端末で次を実行してもらう。代表音声を順に再生し、名前を入力していく対話ツール (AI からは端末入力ができないので実行しない):
+**Web UI を開いているなら、それが一番早い**: ユーザーに「画面の『Preview』タブで、波形とトラックを見ながら代表音声 (▶) を聞いて名前を入れ、Ctrl+S で保存してください」と案内する。保存すると `speakers.json` と書き出し済みファイルがすべて更新される (CLI の `speaker rename` と同じ処理)。保存後に `scribe speakers <ID> --json` で結果を確認してから次へ進む。
+
+ユーザーが端末で音声を聞きながら付けたい場合は、ユーザーの端末で次を実行してもらう。代表音声を順に再生し、名前を入力していく対話ツール (AI からは端末入力ができないので実行しない):
 
 ```bash
 scribe speaker edit --job <ID>
@@ -114,7 +132,9 @@ scribe speaker rename --job <ID> SPEAKER_01=鈴木 --json   # refreshed のフ�
 
 `refreshed` が空なら、まだファイルに書き出していない (または stdout に出しただけ) なので、手順 4 で書き出す。
 
-注意: 直せるのは **話者の名前** (SPEAKER 番号 → 名前の対応)。「この 1 発言だけ別の人」という発言単位の付け替えはできない。話者分離そのものが合っていない場合は `--diarizer` を変えて `process --job <ID>` で再実行する。
+文字起こしの誤り (固有名詞の聞き間違いなど) は、Web UI の Preview で行をダブルクリックして直せる。Ctrl+S で保存すると書き出し済みファイルも書き直される。修正は `edits.json` に別保存され、元の文字起こしは残る (行にカーソルを当てると元の文が見える)。行を空にするとその行は書き出しから除かれる。再処理で行が変わると修正は適用されなくなり、`status` の `warnings` に `text_edits_lost` が出る。
+
+注意: CLI で直せるのは **話者の名前** (SPEAKER 番号 → 名前の対応)。「この 1 発言だけ別の人」という発言単位の付け替えはできない。話者分離そのものが合っていない場合は `--diarizer` を変えて `process --job <ID>` で再実行する。
 
 書き出したファイルを渡すときは、話者数・各人の発話時間・未命名の話者の有無を一言添える。会議の録音や文字起こしは機密になりやすいので、git 管理下に出力するならコミット対象外の場所 (例: `.gitignore` 済みのフォルダ) を選ぶ。
 
@@ -154,6 +174,7 @@ scribe speakers <ID> --json        # 話者一覧 (名前、発話時間、sampl
 | `model_not_cached` | `HF_HUB_OFFLINE=1` でモデル未取得。一度オンラインで実行する |
 | `backend_failed` | 全 Backend が失敗。`message` に各 Backend の理由が並ぶ。`not installed` なら上の `uv sync` をやり直す |
 | `job_not_found` | ID 違い。`scribe jobs` で確認 |
+| `port_in_use` | `serve` が既に起動中 (その URL を開く) か、別アプリがポートを使用中 (`--port` を変える) |
 
 話者分離の結果が怪しいとき (人数が多すぎる・少なすぎる) は、`status` の `stages.diarize.backend` を見る。`sherpa/cpu` なら Nemotron が使えていない (extra 未導入など) ので、セットアップをやり直して `process --job <ID> --diarizer nemotron` で再実行するのが一番効く。
 

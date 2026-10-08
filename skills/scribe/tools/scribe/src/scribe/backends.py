@@ -154,8 +154,12 @@ def transcribe_faster_whisper(wav, opts):
     except LocalEntryNotFoundError:
         raise Unavailable(f"model_not_cached: faster-whisper {opts['model']}")
     # pass samples, not a path: faster-whisper's PyAV decoding breaks with newer av releases
+    # "clips" = only these [start, end] spans (gap fill). Whisper can jump its timestamps over a whole
+    # stretch of speech inside a 30 s window; decoding that stretch on its own recovers it.
+    clips = opts.get("clips")
     segments, info = model.transcribe(read_wav(wav), language=opts["language"], word_timestamps=True,
-                                      vad_filter=True, condition_on_previous_text=False)
+                                      vad_filter=not clips, condition_on_previous_text=False,
+                                      **({"clip_timestamps": [t for c in clips for t in c]} if clips else {}))
     out = []
     with bar(total=round(info.duration, 1), desc=f"faster-whisper ({dev})") as b:
         for s in segments:  # generator: decoding happens here
@@ -170,7 +174,7 @@ def transcribe_faster_whisper(wav, opts):
 
 DIARIZERS = {"nemotron": diarize_nemotron, "pyannote": diarize_pyannote, "sherpa": diarize_sherpa}
 ASRS = {"faster-whisper": transcribe_faster_whisper}
-REGISTRY = {"diarize": DIARIZERS, "transcribe": ASRS}
+REGISTRY = {"diarize": DIARIZERS, "transcribe": ASRS, "fill": ASRS}  # fill = ASR on gap clips
 CPU_ONLY = {"sherpa"}
 # name -> (package, pinned model revisions); both go into the cache key
 PINS = {"nemotron": ("transformers", NEMOTRON[1]), "pyannote": ("pyannote.audio", PYANNOTE[1]),

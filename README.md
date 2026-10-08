@@ -36,15 +36,36 @@ plugin は配布元の repo ごとに分かれている (`claat` / `html-deck` /
 
 ```console
 codex plugin marketplace add https://github.com/nogikun/skills
-codex plugin add skills@nogikun
+codex plugin add nogikun@nogikun
 codex plugin add html-deck@nogikun
 ```
 
 ```console
 /plugin marketplace add nogikun/skills
-/plugin install skills@nogikun
+/plugin install nogikun@nogikun
 /plugin install html-deck@nogikun
 ```
+
+marketplace の追加は初回だけ。Codex で更新するときは、登録済みの取得元を使う。
+
+```console
+codex plugin marketplace upgrade nogikun
+```
+
+SSH 形式 (`git@github.com:nogikun/skills`) で登録したあとに HTTPS 形式で追加すると、
+同じ repo でも別の取得元として扱われ、`already added from a different source` になる。
+HTTPS に揃える場合は一度だけ登録を置き換える。
+
+```console
+codex plugin marketplace remove nogikun
+codex plugin marketplace add https://github.com/nogikun/skills
+```
+
+ローカル checkout の更新は `git pull`、Codex の marketplace の更新は上記の `upgrade` を使う。
+GitHub Actions は毎週月曜 06:00 JST と手動実行で配布元を同期し、更新 PR を作る。
+PR をマージしたあとに `upgrade` すると、その内容を取得できる。
+変更のある plugin だけ patch version を上げ、同じ内容での再実行では version を維持する。
+`.agents/plugins/marketplace.json` と `.claude-plugin/marketplace.json` は同じ名前・version を使う。
 
 Hermes Agent の Skills Hub でも使える。Hermes は repo 直下の `skills/` を custom tap として読む。
 初回だけ tap を追加すると、CLI と Web ダッシュボードの Browse hub / 検索から見えるようになる。

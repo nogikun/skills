@@ -1,5 +1,6 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "usable-xlsm",
+  "version": "1.0.0",
   "description": "Inspect, create, repair, and statically validate macro-enabled Excel workbooks and VBA on Windows, macOS, and Linux. Use for .xlsm/.xlsb/.xltm development, incremental VBA changes, portability review, and regression testing. Preserve the dedicated Windows Excel worker for automated editing, macro execution, and atomic release. Do not use for plain .xlsx data work or untrusted macro execution."
 }

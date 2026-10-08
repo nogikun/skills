@@ -1,53 +1,105 @@
 {
   "name": "nogikun",
-  "owner": {
-    "name": "nogikun",
-    "url": "https://github.com/nogikun"
-  },
   "interface": {
     "displayName": "nogikun skills"
   },
   "plugins": [
     {
       "name": "aws-architecture",
-      "source": "./plugins/aws-architecture",
       "description": "AWS の構成図 (ブロック図) を、編集できる draw.io ファイル (.drawio) として設計・作図し、AWS 公式アイコンとグループ規約 (AWS Cloud ⊃ Region ⊃ VPC ⊃ AZ ⊃ Subnet) と構成の定石 (DB を private に置く、Multi-AZ、NAT の置き場所など) をスクリプトで検証し、PNG を別モデルに批評させる差し戻しループで仕上げる。「AWS の構成図を作って」「アーキテクチャ図」「インフラ構成図」「システム構成図」「この構成を図にして」「〜なアーキテクチャを設計して図にして」「drawio で AWS」と言われたら、形式が指定されていなくてもこのスキルを使う。既存の .drawio の AWS 図の手直し・規約チェック・レビュー (「この構成図おかしくない?」「AWS のお作法に沿ってる?」) や、AWS アイコンが読めない・足りないという相談にも使う。AWS 以外の汎用フローチャートや、AWS が出てこないネットワーク図は drawio スキルに回す。",
+      "source": {
+        "source": "local",
+        "path": "./plugins/aws-architecture"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity",
       "version": "1.0.0"
     },
     {
       "name": "aws-icons",
-      "source": "./plugins/aws-icons",
       "description": "AWSアイコンパッケージZIP（Icon-package_*.zip）を受け取り、draw.io用SVGライブラリ（mxlibrary形式のXML）に変換して保存する。ユーザーが「新しいAWSアイコンZIPを取り込んで」「icon-package…zipをdrawio用にして」「AWSアイコンをdraw.ioで使えるようにしたい」などと言ったとき、またはIcon-package_*.zipのパスを渡されたときは必ずこのスキルを使うこと。",
+      "source": {
+        "source": "local",
+        "path": "./plugins/aws-icons"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity",
       "version": "1.0.0"
     },
     {
       "name": "claat",
-      "source": "./plugins/claat",
       "description": "素材（プロジェクトのソース、README、設定ファイル、既存ドキュメント、手順メモ、ログ、URL など）から Google Codelabs 形式の手順書を作り、HTML まで仕上げる。読者を「その分野をまったく知らない中学生」と想定して manual.md を書き、natural-japanese で日本語を整え、同梱の Go CLI（`cmd/claat-tools/main.go`）で lint してから `claat` に HTML 生成を委譲する。ユーザーが codelab / コードラボ / claat / 手順書 / マニュアル / チュートリアル / セットアップガイド / 使い方ドキュメント の作成・下書き・書き直しを求めたとき、「このプロジェクトの手順書を作って」「manual.md を書いて」「セットアップ手順をまとめて」のように claat という語を出さずに手順書化を依頼されたとき、あるいは既にある .md について「ビルドして」「HTML にして」「lint を通して」「codelab を生成して」と言われたときは必ず使うこと。`claat` が PATH に無い、`Duration` が不正、画像が見つからないといったビルド失敗の原因調査にも使う。",
+      "source": {
+        "source": "local",
+        "path": "./plugins/claat"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity",
       "version": "1.0.0"
     },
     {
       "name": "html-deck",
-      "source": "./plugins/html-deck",
       "description": "材料(メモ・記事・調査資料・議事録・URL・口頭の依頼)からHTMLのスライド資料を作り、図やSVG・draw.ioのダイアグラムも含めて1600x900固定キャンバスで実測検査し、評価サブエージェントの差し戻しループで読みやすさまで仕上げる。「スライド作って」「プレゼン資料」「登壇資料」「提案資料」「deck」「slides」「presentation」「この資料をスライドに」「発表用にまとめて」と言われたら、形式が指定されていなくてもまずこのスキルを使う。文字が小さい・詰まりすぎ・はみ出す・見づらいといったスライドの品質改善や、既存HTMLデッキの手直しにも使う。生成したデッキ上でユーザーが要素を指して直しを出す「レビューモード」もこのスキルが持つ。「レビューさせて」「直したいところがある」「デッキを開いて」「指摘を読んで」「送った指摘を直して」「ここ直して」と言われたときも、既存のデッキがあるならこのスキルで受ける。編集可能な .pptx ファイルそのものが納品要件のときだけ pptx スキルに回す。",
+      "source": {
+        "source": "local",
+        "path": "./plugins/html-deck"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity",
       "version": "1.0.0"
     },
     {
       "name": "scribe",
-      "source": "./plugins/scribe",
       "description": "会議の動画・音声ファイル (mp4/mov/mkv/webm/mp3/m4a/wav/flac/ogg など、パスを渡すだけ) を話者分離つきで日本語文字起こしし、話者に名前を付けて議事録 (Markdown) や字幕 (WebVTT / SRT)、テキスト、JSON に書き出すスキル。同梱の Scribe CLI (NVIDIA Nemotron 3 Diarization + faster-whisper) を uv で実行する。「会議を文字起こしして」「この mp4/m4a/wav を書き起こして」「誰が何を話したか分けて」「議事録の元データを作って」「字幕 (vtt/srt) を作って」「話者の名前を付け直して」「さっきの議事録の話者名が違うので直して」「前回のジョブを書き出して」といった依頼では、ファイル形式や『Scribe』という名前が出ていなくても必ずこのスキルを使うこと。Zoom/Teams/Meet の録画、インタビュー、打ち合わせ音声の話者識別・話者分離の確認や、文字起こしジョブの再開・状態確認・一覧にも使う。",
+      "source": {
+        "source": "local",
+        "path": "./plugins/scribe"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity",
       "version": "1.0.0"
     },
     {
       "name": "usable-xlsm",
-      "source": "./plugins/usable-xlsm",
       "description": "Inspect, create, repair, and statically validate macro-enabled Excel workbooks and VBA on Windows, macOS, and Linux. Use for .xlsm/.xlsb/.xltm development, incremental VBA changes, portability review, and regression testing. Preserve the dedicated Windows Excel worker for automated editing, macro execution, and atomic release. Do not use for plain .xlsx data work or untrusted macro execution.",
+      "source": {
+        "source": "local",
+        "path": "./plugins/usable-xlsm"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity",
       "version": "1.0.0"
     },
     {
       "name": "nogikun",
-      "source": "./",
       "description": "Skills: arch-builder, aws-drawio-import, claat-creator, html-deck, scribe, usable-xlsm",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity",
       "version": "1.0.1"
     }
   ]

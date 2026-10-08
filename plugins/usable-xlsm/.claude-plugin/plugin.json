@@ -1,5 +1,6 @@
 {
   "name": "usable-xlsm",
+  "version": "1.0.0",
   "description": "excelマクロ(VBA) の解析、動作テストをAIエージェントが行えるようにする。",
   "author": {
     "name": "nogikun",

@@ -1,5 +1,6 @@
 {
   "name": "claat",
+  "version": "1.0.0",
   "description": "claat 形式の手順書を lint して Google Codelabs の HTML にする Go CLI と skill",
   "author": {
     "name": "nogikun",

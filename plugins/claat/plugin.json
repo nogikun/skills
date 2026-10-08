@@ -1,5 +1,6 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "claat",
+  "version": "1.0.0",
   "description": "素材（プロジェクトのソース、README、設定ファイル、既存ドキュメント、手順メモ、ログ、URL など）から Google Codelabs 形式の手順書を作り、HTML まで仕上げる。読者を「その分野をまったく知らない中学生」と想定して manual.md を書き、natural-japanese で日本語を整え、同梱の Go CLI（`cmd/claat-tools/main.go`）で lint してから `claat` に HTML 生成を委譲する。ユーザーが codelab / コードラボ / claat / 手順書 / マニュアル / チュートリアル / セットアップガイド / 使い方ドキュメント の作成・下書き・書き直しを求めたとき、「このプロジェクトの手順書を作って」「manual.md を書いて」「セットアップ手順をまとめて」のように claat という語を出さずに手順書化を依頼されたとき、あるいは既にある .md について「ビルドして」「HTML にして」「lint を通して」「codelab を生成して」と言われたときは必ず使うこと。`claat` が PATH に無い、`Duration` が不正、画像が見つからないといったビルド失敗の原因調査にも使う。"
 }

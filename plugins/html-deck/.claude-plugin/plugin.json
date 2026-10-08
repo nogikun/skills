@@ -1,5 +1,6 @@
 {
   "name": "html-deck",
+  "version": "1.0.0",
   "description": "ドラフトから HTML/PDF/PPTX スライドを自動生成するスキル",
   "author": {
     "name": "nogikun",

@@ -7,6 +7,7 @@
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -14,7 +15,7 @@ import tempfile
 from pathlib import Path
 
 OWNER = os.environ.get("OWNER", "nogikun")
-SELF = os.environ.get("GITHUB_REPOSITORY", "")
+SELF = os.environ.get("GITHUB_REPOSITORY", f"{OWNER}/skills")
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -29,21 +30,63 @@ def write_json(path: Path, data: dict) -> None:
     path.write_bytes(text.encode("utf-8"))
 
 
+def same_skills(previous: Path, current: Path) -> bool:
+    old = {p.relative_to(previous) for p in previous.rglob("*") if p.is_file()}
+    new = {p.relative_to(current) for p in current.rglob("*") if p.is_file()}
+    if old != new:
+        return False
+    for p in old:
+        if (previous / p).read_bytes() == (current / p).read_bytes():
+            continue
+        # mirror の .gitattributes に従い、改行だけの差で毎週 version を上げない。
+        git_path = (previous / p).relative_to(ROOT).as_posix()
+        args = ("git", "-C", str(ROOT), "hash-object", f"--path={git_path}")
+        if sh(*args, str(previous / p)) != sh(*args, str(current / p)):
+            return False
+    return True
+
+
+def write_manifests(dest: Path, previous: Path, name: str, description: str, repo: str) -> str:
+    legacy = previous / ".claude-plugin" / "plugin.json"
+    portable = previous / "plugin.json"
+    old = json.loads(legacy.read_text(encoding="utf-8")) if legacy.is_file() else {}
+    old_portable = json.loads(portable.read_text(encoding="utf-8")) if portable.is_file() else {}
+    version = old_portable.get("version", old.get("version", "1.0.0"))
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        raise ValueError(f"{previous}: version must be X.Y.Z, got {version!r}")
+    # 同じ内容での週次実行はバージョンを変えず、変更時だけキャッシュを更新させる。
+    if (old or old_portable) and (
+        old.get("name") != name or old.get("description") != description
+        or not same_skills(previous / "skills", dest / "skills")
+    ):
+        major, minor, patch = map(int, version.split("."))
+        version = f"{major}.{minor}.{patch + 1}"
+    (dest / ".claude-plugin").mkdir(parents=True, exist_ok=True)
+    write_json(dest / ".claude-plugin" / "plugin.json", {
+        "name": name, "version": version, "description": description,
+        "author": {"name": OWNER, "url": f"https://github.com/{OWNER}"},
+        "repository": f"https://github.com/{repo}", "skills": "./skills/",
+    })
+    write_json(dest / "plugin.json", {
+        "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+        "name": name, "version": version, "description": description,
+    })
+    return version
+
+
 def discover() -> list[dict]:
     """配布元と、そこにある skill 名を集める。"""
     repos = json.loads(sh(
         "gh", "repo", "list", OWNER, "--no-archived", "--visibility", "public",
-        "--limit", "200", "--json", "nameWithOwner,description",
+        "--limit", "200", "--json", "nameWithOwner,description,isEmpty",
     ))
     found = []
     for r in repos:
         name = r["nameWithOwner"]
-        if name == SELF:
+        if name == SELF or r.get("isEmpty"):
             continue
-        try:
-            tree = json.loads(sh("gh", "api", f"repos/{name}/git/trees/HEAD?recursive=1"))
-        except subprocess.CalledProcessError:
-            continue
+        # API 失敗を「skill が無い」と扱うと、既存 plugin を消してしまう。
+        tree = json.loads(sh("gh", "api", f"repos/{name}/git/trees/HEAD?recursive=1"))
         skills = sorted(
             p.split("/")[1]
             for e in tree.get("tree", [])
@@ -73,6 +116,7 @@ def main() -> int:
 
     work = Path(tempfile.mkdtemp())
     staged = work / "staged"
+    versions = {}
     for f in found:
         # repo ごとに別のディレクトリへ入れて、どの repo 由来かを保つ
         into = work / f["repo"].replace("/", "_")
@@ -102,14 +146,9 @@ def main() -> int:
         hermes_skills.mkdir(parents=True, exist_ok=True)
         for skill in f["skills"]:
             shutil.copytree(src / skill, hermes_skills / skill)
-        (dest / ".claude-plugin").mkdir(parents=True)
-        write_json(dest / ".claude-plugin" / "plugin.json", {
-            "name": plugin,
-            "description": f["description"],
-            "author": {"name": OWNER, "url": f"https://github.com/{OWNER}"},
-            "repository": f"https://github.com/{f['repo']}",
-            "skills": "./skills/",
-        })
+        versions[plugin] = write_manifests(dest, ROOT / "plugins" / plugin, plugin, f["description"], f["repo"])
+
+    versions[OWNER] = write_manifests(staged, ROOT, OWNER, f"{OWNER} が作った Agent Skills の配布用ミラー", SELF)
 
     marketplace = {
         "name": OWNER,
@@ -117,14 +156,16 @@ def main() -> int:
         "interface": {"displayName": f"{OWNER} skills"},
         "plugins": [
             {
-                "name": "skills",
+                "name": OWNER,
                 "source": "./",
+                "version": versions[OWNER],
                 "description": f"{OWNER} が作った Agent Skills をまとめて導入する",
             },
             *[
                 {
                     "name": f["repo"].split("/")[1],
                     "source": f"./plugins/{f['repo'].split('/')[1]}",
+                    "version": versions[f["repo"].split("/")[1]],
                     "description": f["description"],
                 }
                 for f in found
@@ -141,14 +182,24 @@ def main() -> int:
     # coji/natural-japanese と同じく、repo 直下自体も 1 つの plugin として
     # 追加できるようにする。個別 plugin (`plugins/<repo>/`) も残すので、
     # 利用者は全 skill 一括・配布元ごとのどちらでも選べる。
-    write_json(ROOT / ".claude-plugin" / "plugin.json", {
-        "name": "skills",
-        "description": f"{OWNER} が作った Agent Skills の配布用ミラー",
-        "author": {"name": OWNER, "url": f"https://github.com/{OWNER}"},
-        "repository": f"https://github.com/{OWNER}/skills",
-        "skills": "./skills/",
-    })
+    shutil.copyfile(staged / ".claude-plugin" / "plugin.json", ROOT / ".claude-plugin" / "plugin.json")
+    shutil.copyfile(staged / "plugin.json", ROOT / "plugin.json")
     write_json(ROOT / ".claude-plugin" / "marketplace.json", marketplace)
+    codex_catalog = {
+        "name": OWNER,
+        "interface": marketplace["interface"],
+        "plugins": [
+            {
+                **p,
+                "source": {"source": "local", "path": p["source"]},
+                "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
+                "category": "Productivity",
+            }
+            for p in marketplace["plugins"]
+        ],
+    }
+    (ROOT / ".agents" / "plugins").mkdir(parents=True, exist_ok=True)
+    write_json(ROOT / ".agents" / "plugins" / "marketplace.json", codex_catalog)
 
     for f in found:
         print(f"{f['repo']}\t{f['repo'].split('/')[1]}\t{' '.join(f['skills'])}")

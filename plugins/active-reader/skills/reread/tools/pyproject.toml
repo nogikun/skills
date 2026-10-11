@@ -1,0 +1,21 @@
+[project]
+name = "active-reader"
+version = "0.1.0"
+description = "AI支援型アクティブリーディングツール"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+dependencies = [
+    "janome>=0.5.0",
+    "markdown-it-py>=3",
+]
+
+[project.scripts]
+active-reader = "active_reader.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

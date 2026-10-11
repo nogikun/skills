@@ -26,6 +26,8 @@ let anns = [];
 let current = null;
 const ranges = new Map(); // ann.id -> Range
 const timers = new Map(); // ann.id -> [timeout, ann]  未保存のコメント
+const saves = new Set(); // 保存の通信中に終了してコメントを失わないよう、完了まで待つ
+let readingEnded = false;
 // 切り替え後に遅れて届く保存が別の文書に入らないよう、文書を覚えておく
 const docOf = new WeakMap();
 const annPath = (a) => `/api/docs/${docOf.get(a)}/annotations/${a.id}`;
@@ -354,11 +356,14 @@ const asking = new Map(); // term -> 'pending' | 'no-agent'
 
 function termNote(term) {
   const g = glossary[term];
-  if (g) return h('p', { className: 'summary' }, g.summary || Object.values(g).find((v) => typeof v === 'string'));
-  if (asking.get(term) === 'no-agent') {
-    return h('p', { className: 'muted' }, '依頼を受け付けました。チャットで「送った依頼に対応して」と伝えるか、用語の参照をコピーして貼ってください。');
-  }
-  return h('p', { className: 'muted thinking' }, 'AI が解説しています。詳しい説明はチャットに出ます…');
+  const pending = asking.has(term);
+  return h('div', {},
+    g && h('p', { className: 'summary' }, g.summary || Object.values(g).find((v) => typeof v === 'string')),
+    (!g || pending) && (asking.get(term) === 'no-agent'
+      ? h('p', { className: 'muted' }, '依頼を受け付けました。チャットで「送った依頼に対応して」と伝えるか、用語の参照をコピーして貼ってください。')
+      : h('p', { className: 'muted thinking' }, 'AI が解説しています。詳しい説明はチャットに出ます…')),
+    g && h('button', { className: 'link term-retry', disabled: pending, onclick: () => askAgent(term) },
+      pending ? '解説を依頼済み' : 'もう一度解説'));
 }
 
 function renderTerms() {
@@ -395,27 +400,33 @@ function showTerm(term, scroll = false) {
 }
 
 async function askAgent(term) {
+  if (asking.has(term)) return;
   const id = doc.id;
+  const previous = glossary[term]?.updated_at;
   asking.set(term, 'pending');
+  renderTerms();
   try {
     const res = await api('POST', `/api/docs/${id}/ask`, { term });
     asking.set(term, res.agent_waiting ? 'pending' : 'no-agent');
   } catch (e) {
     asking.delete(term);
+    if (doc?.id === id) renderTerms();
     return alert(e.message);
   }
   if (doc?.id === id) renderTerms();
   // エージェントが一言解説を書き戻すまで待つ（待ち受けが後から始まっても拾えるよう、no-agent でも続ける）
-  for (let i = 0; i < 200 && doc?.id === id && !glossary[term]; i++) {
+  for (let i = 0; i < 200 && doc?.id === id && asking.has(term); i++) {
     await new Promise((r) => setTimeout(r, 3000));
     if (doc?.id !== id) break;
     const g = await api('GET', `/api/docs/${id}/glossary`).catch(() => null);
-    if (g?.[term]) {
+    if (g?.[term] && g[term].updated_at !== previous) {
       glossary = g;
       asking.delete(term);
       renderTerms();
     }
   }
+  asking.delete(term);
+  if (doc?.id === id) renderTerms();
 }
 
 function renderList() {
@@ -483,8 +494,17 @@ function show(a) {
 async function put(a) {
   clearTimeout(timers.get(a.id)?.[0]);
   timers.delete(a.id);
-  const saved = await api('PUT', annPath(a), a);
-  Object.assign(a, { ai: saved.ai, created_at: saved.created_at, updated_at: saved.updated_at });
+  const request = api('PUT', annPath(a), a);
+  saves.add(request);
+  try {
+    const saved = await request;
+    Object.assign(a, { ai: saved.ai, created_at: saved.created_at, updated_at: saved.updated_at });
+  } catch (e) {
+    timers.set(a.id, [null, a]); // 終了前の保存に失敗したら、再試行できるよう残す
+    throw e;
+  } finally {
+    saves.delete(request);
+  }
 }
 
 function putLater(a) {
@@ -1009,6 +1029,7 @@ $('#clean').onclick = () => deleteRecords('/api/records/clean', {});
 
 // チャット（スキル）から書き込まれた結果を、タブに戻ったときに反映する
 async function refresh() {
+  if (readingEnded) return;
   await loadDocs();
   if (timers.size || editing || !doc) return; // 入力中は触らない
   const d = await api('GET', `/api/docs/${doc.id}`);
@@ -1021,6 +1042,32 @@ async function refresh() {
   if (current && JSON.stringify(current) !== before) show(current);
 }
 addEventListener('focus', () => refresh().catch(() => {}));
+
+$('#stop-btn').onclick = async () => {
+  const button = $('#stop-btn');
+  button.disabled = true;
+  button.textContent = '保存して終了中…';
+  document.body.inert = true;
+  try {
+    await flush();
+    await Promise.all(saves);
+    await api('POST', '/api/shutdown', {});
+    readingEnded = true;
+    doc = null; // 用語・マーカーの結果待ちループも終了させる
+    editing = null;
+    bar.hidden = true;
+    closeSpace();
+    document.body.inert = false;
+    button.textContent = '読書を終了しました';
+    $('#reading-ended').showModal();
+  } catch (e) {
+    document.body.inert = false;
+    button.disabled = false;
+    button.textContent = '読書をやめる';
+    alert(`読書を終了できませんでした: ${e.message}`);
+  }
+};
+$('#reading-ended').oncancel = (ev) => ev.preventDefault();
 
 // --- 起動 -------------------------------------------------------------------
 

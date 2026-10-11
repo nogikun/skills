@@ -55,6 +55,9 @@ header .icon:hover { background: var(--hover); }
 #nav-btn { left: .5rem; }
 #panel-btn { right: .5rem; }
 #toc-btn { right: 2.5rem; display: none; }
+#title { margin: 0 11rem 0 2rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#stop-btn { position: absolute; right: 5rem; padding: .3rem .5rem; border-radius: 6px; white-space: nowrap; }
+#stop-btn:hover { background: var(--hover); }
 body.hide-nav #nav-btn, body.hide-panel #panel-btn { color: var(--muted); }
 
 main {
@@ -161,6 +164,8 @@ li:hover .row-action, .row-action:focus-visible { opacity: 1; }
 #terms > li.term .item-text { text-decoration: underline dashed var(--accent); text-underline-offset: 4px; }
 #terms > li.undefined .item-text { color: var(--muted); }
 .summary { margin: 0; }
+.term-retry { margin-top: .5rem; font-size: .8rem; }
+.term-retry:disabled { color: var(--muted); cursor: default; }
 .thinking { animation: pulse 1.6s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .45; } }
 .ai dt { font-size: .75rem; font-weight: 600; color: var(--muted); margin-top: .75rem; }

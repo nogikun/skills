@@ -1,10 +1,11 @@
 import argparse
 import json
+import os
 import sys
 import time
 import webbrowser
 
-from . import nlp, server, store
+from . import hooks, nlp, server, store
 
 
 def confirm(title, rows, yes):
@@ -45,6 +46,8 @@ def cmd_open(a):
         srv.serve_forever()
     except KeyboardInterrupt:
         pass
+    finally:
+        srv.server_close()
 
 
 def cmd_export(a):
@@ -130,6 +133,17 @@ def cmd_list(a):
               f"{r['title'][:24]:24}  {r['source_path']}{missing}")
 
 
+def cmd_listen(a):
+    hooks.listen(a.session_id, a.port, a.stop)
+    print('自動待ち受けを終了しました' if a.stop else 'この会話で UI の依頼に自動対応します')
+
+
+def cmd_install_hooks(a):
+    path = hooks.install()
+    print(f'{path} に reread 用の hooks を追加しました（既存の hooks は保持）')
+    print('/hooks で追加した定義を確認して信頼し、新しい会話で読書を開始してください')
+
+
 def cmd_delete(a):
     rows = store.list_records(a.data_dir)
     ids = {i for p in a.paths for i in store.match(rows, p)}
@@ -187,6 +201,15 @@ def main(argv=None):
     s.add_argument('--timeout', type=int,
                    help='待つ秒数（省略時は無期限、0 は即時取得。時間切れは {}）')
     s.set_defaults(fn=cmd_wait)
+
+    s = sub.add_parser('listen', help='ChatGPT/Codex の同期 Stop hook に待ち受けを任せる')
+    s.add_argument('--session-id', default=os.environ.get('CODEX_THREAD_ID'))
+    s.add_argument('--port', type=int, default=8765)
+    s.add_argument('--stop', action='store_true', help='この会話の自動待ち受けを終了する')
+    s.set_defaults(fn=cmd_listen)
+
+    s = sub.add_parser('install-hooks', help='既存の設定を保持して ChatGPT/Codex 用 hooks を登録する')
+    s.set_defaults(fn=cmd_install_hooks)
 
     s = sub.add_parser('list', parents=[common], help='読書記録の一覧')
     s.set_defaults(fn=cmd_list)

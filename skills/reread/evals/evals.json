@@ -56,16 +56,17 @@
       "id": 4,
       "name": "codex-reading-session",
       "prompt": "ローカル実行できるChatGPT／Codexで hybrid_search.md を一緒に読みたい。UIで用語を押すので待っていて。",
-      "expected_output": "UIを起動し、会話内で wait --timeout 50 を待つ。時間切れの {} で解説したり会話を終了したりせず、届いた用語を説明して一言解説を書き戻し、待ち受けに戻る。",
+      "expected_output": "UIを起動し、hooks起動済みなら listen --port でこの会話だけの自動待ち受けを有効化して応答を終える。Stop hookで届いた用語を説明し一言解説を書き戻す。hooksが未起動なら従来の wait --timeout 50 を会話内で待つ。時間切れの {} は依頼として扱わない。",
       "files": [
         "evals/files/hybrid_search.md"
       ],
       "assertions": [
         "--no-browser で起動し、起動出力のURLをリンクで案内した",
-        "waitを終了通知頼みで放置せず、実行結果を会話内で取得した",
-        "時間切れの {} を用語依頼として扱っていない",
+        "hooks方式ではlistenを有効化し、waitを同時に起動せずStop hookに待機を任せた",
+        "hooksが未起動なら従来のwaitの実行結果を会話内で取得した",
+        "時間切れを用語依頼として扱っていない",
         "用語依頼への説明とset-termsでの書き戻しを行った",
-        "読書終了の入力で実行中の待ち受けを終了した"
+        "読書終了の入力でlisten --stopまたは実行中のwaitを終了した"
       ]
     },
     {

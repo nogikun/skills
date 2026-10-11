@@ -10,6 +10,7 @@
   <header>
     <button id="nav-btn" class="icon" type="button" title="文書一覧の表示切替（⌘B / Ctrl+B）" aria-label="文書一覧"></button>
     <span id="title"></span>
+    <button id="stop-btn" class="link" type="button">読書をやめる</button>
     <button id="toc-btn" class="icon" type="button" title="目次" aria-label="目次"></button>
     <button id="panel-btn" class="icon" type="button" title="サイドパネルの表示切替（⌥⌘B / Ctrl+Alt+B）" aria-label="サイドパネル"></button>
   </header>
@@ -33,6 +34,10 @@
       <ol id="terms" hidden></ol>
     </aside>
   </main>
+  <dialog id="reading-ended" aria-labelledby="ended-title">
+    <h2 id="ended-title">読書を終了しました</h2>
+    <p>記録は保存されています。この画面を閉じてください。</p>
+  </dialog>
   <dialog id="records">
     <h2>記録を管理</h2>
     <p class="muted">削除されるのは読書記録だけです。元の文書は削除しません。</p>

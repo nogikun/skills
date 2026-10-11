@@ -9,6 +9,12 @@
   },
   "plugins": [
     {
+      "name": "active-reader",
+      "source": "./plugins/active-reader",
+      "description": "技術書・技術記事・論文などの Markdown / テキスト資料を一緒に読む「勉強のお供」。ローカルのリーダー UI（ブラウザ）を起動してユーザーに読ませ・マーカーを付けさせ、CLI で読書記録を読み書きしながら、分からない箇所の説明、自己説明の評価、確認問題の出題と採点、専門用語の用語集づくり、復習をチューターとして行う。「この本／記事／資料を読みたい・勉強したい」「勉強に付き合って」「分からないところを説明して」「理解できているかチェックして」「問題を出して」「用語集を作って」「この用語を解説して」「復習したい」「マーカーを付けたところを見て」「reread」「active reader」と言われたとき、または .md / .txt の学習資料を読み進めたい様子のときは、明示的に名前を出されなくても必ずこのスキルを使うこと。",
+      "version": "1.0.0"
+    },
+    {
       "name": "aws-architecture",
       "source": "./plugins/aws-architecture",
       "description": "AWS の構成図 (ブロック図) を、編集できる draw.io ファイル (.drawio) として設計・作図し、AWS 公式アイコンとグループ規約 (AWS Cloud ⊃ Region ⊃ VPC ⊃ AZ ⊃ Subnet) と構成の定石 (DB を private に置く、Multi-AZ、NAT の置き場所など) をスクリプトで検証し、PNG を別モデルに批評させる差し戻しループで仕上げる。「AWS の構成図を作って」「アーキテクチャ図」「インフラ構成図」「システム構成図」「この構成を図にして」「〜なアーキテクチャを設計して図にして」「drawio で AWS」と言われたら、形式が指定されていなくてもこのスキルを使う。既存の .drawio の AWS 図の手直し・規約チェック・レビュー (「この構成図おかしくない?」「AWS のお作法に沿ってる?」) や、AWS アイコンが読めない・足りないという相談にも使う。AWS 以外の汎用フローチャートや、AWS が出てこないネットワーク図は drawio スキルに回す。",
@@ -47,8 +53,8 @@
     {
       "name": "nogikun",
       "source": "./",
-      "description": "Skills: arch-builder, aws-drawio-import, claat-creator, html-deck, scribe, usable-xlsm",
-      "version": "1.0.1"
+      "description": "Skills: arch-builder, aws-drawio-import, claat-creator, html-deck, reread, scribe, usable-xlsm",
+      "version": "1.0.2"
     }
   ]
 }

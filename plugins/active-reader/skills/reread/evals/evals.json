@@ -1,0 +1,88 @@
+{
+  "skill_name": "reread",
+  "evals": [
+    {
+      "id": 1,
+      "name": "start-reading-session",
+      "prompt": "skills/reread/evals/files/hybrid_search.md を勉強したいから付き合って",
+      "expected_output": "リーダー UI を --no-browser でバックグラウンド起動し（ブラウザは開かない）、出力の URL を「こちらを開いてください」のリンクとコピー用の URL で案内し、u/e/q のマーカー操作を案内する。いきなり全文を要約・講義しない。",
+      "files": [
+        "evals/files/hybrid_search.md"
+      ],
+      "assertions": [
+        "リーダー UI を active-reader open --no-browser で起動した",
+        "ブラウザを自動で開いていない（open コマンドやブラウザ操作ツールも使っていない）",
+        "返信で起動出力の URL を「こちらを開いてください」形式のクリックできるリンクとして案内している",
+        "返信にコピー用の URL がそのままの形（コードブロックなど）でもある",
+        "返信で u / e / q のマーカー操作を案内している",
+        "いきなり資料全体の要約・講義をしていない（読むのはユーザー）",
+        "起動したサーバーを最後に停止した"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "explain-and-evaluate-marks",
+      "prompt": "hybrid_search.md 読みながらマーカー付けといた。分からないとこ説明して、あと自分の説明が合ってるか見てほしい",
+      "expected_output": "記録を export し、Unknown(RRF) を note に沿って説明し explanation を書き戻す。Explain(BM25) の自己説明を評価し、IDF・TF飽和・文書長正規化の不足を指摘して evaluation を書き戻す。Quiz は頼まれていないので勝手に解答を見せない。",
+      "files": [
+        "evals/files/hybrid_search.md"
+      ],
+      "seed": "marked",
+      "assertions": [
+        "Unknown(RRF) の ai.explanation が記録に書き戻されている",
+        "説明が note の疑問（なぜ順位の逆数か・k とは）に答えている",
+        "Explain(BM25) の ai.evaluation が記録に書き戻されている",
+        "評価が IDF・TF 飽和・文書長正規化の不足を指摘している",
+        "頼まれていない Quiz の模範解答を見せていない"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "review-without-spoilers",
+      "prompt": "昨日読んだハイブリッド検索のとこ、復習したい",
+      "expected_output": "記録から review_required / learning の項目を見つけ、問題を1問だけ出して回答を待つ。模範解答や原文・過去の説明を先に見せない。",
+      "files": [
+        "evals/files/hybrid_search.md"
+      ],
+      "seed": "review",
+      "assertions": [
+        "記録 (export/list) を読んで復習対象を選んだ",
+        "記録にある既存の問題か、記録に基づく説明課題を出している",
+        "1問（1課題）だけ出して回答を待っている",
+        "模範解答・過去の AI 説明・原文の答え部分を先に見せていない"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "codex-reading-session",
+      "prompt": "ローカル実行できるChatGPT／Codexで hybrid_search.md を一緒に読みたい。UIで用語を押すので待っていて。",
+      "expected_output": "UIを起動し、会話内で wait --timeout 50 を待つ。時間切れの {} で解説したり会話を終了したりせず、届いた用語を説明して一言解説を書き戻し、待ち受けに戻る。",
+      "files": [
+        "evals/files/hybrid_search.md"
+      ],
+      "assertions": [
+        "--no-browser で起動し、起動出力のURLをリンクで案内した",
+        "waitを終了通知頼みで放置せず、実行結果を会話内で取得した",
+        "時間切れの {} を用語依頼として扱っていない",
+        "用語依頼への説明とset-termsでの書き戻しを行った",
+        "読書終了の入力で実行中の待ち受けを終了した"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "codex-resume-queued-requests",
+      "prompt": "ChatGPT／Codexの会話を閉じた後、UIからマーカーを送った。送った依頼に対応して。",
+      "expected_output": "起動中のサーバーから wait --timeout 0 で依頼を取得し、種類に応じて説明・評価・出題して書き戻す。空になったら終了する。出題や自己説明が必要なら答えを先に見せず回答を待つ。",
+      "files": [
+        "evals/files/hybrid_search.md"
+      ],
+      "seed": "marked",
+      "assertions": [
+        "wait --timeout 0 で既存のキューから依頼を取得した",
+        "AIの結果を既存の読書記録へ書き戻した",
+        "空のキューで無期限待ち受けを勝手に再開していない",
+        "自己説明や問題の答えを先に見せていない"
+      ]
+    }
+  ]
+}

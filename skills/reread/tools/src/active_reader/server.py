@@ -91,6 +91,7 @@ def make_server(data_dir, port=0):
 
     # UI → エージェント（スキル）への依頼キュー。`active-reader wait` が長ポーリングで受け取る
     queue, cond, waiting = [], threading.Condition(), [0]
+    stopping = threading.Event()
 
     def ask(doc_id, body):
         """用語 {term} か、マーカー {ann_ids: [...]} への対応をエージェントに頼む。"""
@@ -125,14 +126,20 @@ def make_server(data_dir, port=0):
         with cond:
             waiting[0] += 1
             try:
-                cond.wait_for(lambda: queue, timeout=min(float(body.get('timeout', 50)), 120))
+                cond.wait_for(lambda: queue or stopping.is_set(), timeout=min(float(body.get('timeout', 50)), 120))
             finally:
                 waiting[0] -= 1
-            return queue.pop(0) if queue else {}
+            return None if stopping.is_set() else (queue.pop(0) if queue else {})
 
     def route(method, path, body):
+        if method == 'POST' and path == '/api/shutdown':
+            with cond:
+                stopping.set()
+                cond.notify_all()
+            return 200, {'stopped': True}
         if method == 'POST' and path == '/api/requests/next':
-            return 200, next_request(body)
+            req = next_request(body)
+            return (503, {'error': '読書を終了しました'}) if req is None else (200, req)
         m = ASK.match(path)
         if method == 'POST' and m:
             return 200, ask(m[1], body)
@@ -226,6 +233,10 @@ def make_server(data_dir, port=0):
                 if not isinstance(body, dict):
                     raise ValueError('JSON object expected')
                 self.send(*route(method, self.path, body))
+                if method == 'POST' and self.path == '/api/shutdown':
+                    # 成功応答を返してから、serve_forever と別のスレッドで止める。
+                    self.wfile.flush()
+                    threading.Thread(target=srv.shutdown, daemon=True).start()
             except (LookupError, OSError) as e:
                 self.send(404, {'error': str(e)})
             except (ValueError, TypeError) as e:
@@ -241,10 +252,11 @@ def make_server(data_dir, port=0):
             self.write('DELETE')
 
     try:
-        return ThreadingHTTPServer(('127.0.0.1', port), Handler)
+        srv = ThreadingHTTPServer(('127.0.0.1', port), Handler)
     except OSError:
         # ponytail: ポート使用中ならランダムポート。origin が変わるのでスクロール位置は引き継がれない
-        return ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        srv = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    return srv
 
 
 def next_request(port, timeout=50):

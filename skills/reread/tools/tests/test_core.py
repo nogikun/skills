@@ -259,3 +259,55 @@ def test_cli_wait_default_deadline_and_errors(monkeypatch, capsys):
     monkeypatch.setattr(server, 'next_request', disconnected)
     with pytest.raises(SystemExit, match='接続できません'):
         cli.main(['wait'])
+
+
+def test_ui_shutdown_stops_cli_and_only_its_server(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    import re
+    import subprocess
+    import sys
+    import urllib.error
+    import urllib.request
+
+    md = tmp_path / 'a.md'
+    doc = make_doc(md)
+    data = tmp_path / 'records'
+    store.upsert(data, doc, 'ann_1', ANN)
+    other = server.make_server(data)
+    threading.Thread(target=other.serve_forever, daemon=True).start()
+    process = subprocess.Popen([
+        sys.executable, '-c', 'from active_reader.cli import main; main()',
+        'open', str(md), '--data-dir', str(data), '--port', '0', '--no-browser',
+    ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        port = int(re.search(r'127\.0\.0\.1:(\d+)', process.stdout.readline()).group(1))
+        url = f'http://127.0.0.1:{port}/api/shutdown'
+        # 通常の GET や他サイトからの単純リクエストでは終了しない。
+        for request, status in (
+            (urllib.request.Request(url), 404),
+            (urllib.request.Request(url, data=b'{}', headers={'Content-Type': 'text/plain'}), 415),
+            (urllib.request.Request(url, data=b'{}', headers={'Content-Type': 'application/json', 'Host': 'evil.example'}), 403),
+        ):
+            with pytest.raises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(request)
+            assert error.value.code == status
+
+        with ThreadPoolExecutor() as pool:
+            pending = pool.submit(server.next_request, port, 50)
+            request = urllib.request.Request(url, data=b'{}', headers={'Content-Type': 'application/json'})
+            with urllib.request.urlopen(request) as response:
+                assert json.load(response) == {'stopped': True}
+            with pytest.raises(OSError):
+                pending.result(timeout=3)
+        assert process.wait(timeout=3) == 0
+        with pytest.raises(OSError):
+            server.next_request(port, timeout=0)
+        assert server.attach(other.server_address[1], md)
+        assert store.read(data, doc['id'])['annotations'][0]['note'] == ANN['note']
+        assert md.exists()
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            process.wait(timeout=3)
+        other.shutdown()
+        other.server_close()

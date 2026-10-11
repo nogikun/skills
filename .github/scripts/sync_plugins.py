@@ -184,7 +184,12 @@ def main() -> int:
     # 利用者は全 skill 一括・配布元ごとのどちらでも選べる。
     shutil.copyfile(staged / ".claude-plugin" / "plugin.json", ROOT / ".claude-plugin" / "plugin.json")
     shutil.copyfile(staged / "plugin.json", ROOT / "plugin.json")
-    write_json(ROOT / ".claude-plugin" / "marketplace.json", marketplace)
+    # skill-mart は --version 省略時に既存値を保持するので、新しい配布先にも
+    # 同期で決めた plugin ごとの version を先に渡す。
+    for directory in (".claude-plugin", ".cursor-plugin", ".github/plugin"):
+        catalog = ROOT / directory / "marketplace.json"
+        catalog.parent.mkdir(parents=True, exist_ok=True)
+        write_json(catalog, marketplace)
     codex_catalog = {
         "name": OWNER,
         "interface": marketplace["interface"],

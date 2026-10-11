@@ -41,9 +41,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python3 .github/scripts/sync_plugins.py | tee "$RUNNER_TEMP/found.tsv"
 
-      # sync が決めた名前・version を維持し、両クライアントの catalog を書き出す。
+      # sync が決めた名前・version を維持し、4 クライアントの catalog を書き出す。
       - name: marketplace を書き出す
-        run: npx -y github:nogikun/skill-mart#v1.0.0
+        run: npx -y github:nogikun/skill-mart#v1.0.1 --require-name
 
       - name: PR の本文を組み立てる
         run: |

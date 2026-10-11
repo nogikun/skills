@@ -30,8 +30,8 @@ npx openskills install nogikun/skills
 npx openskills sync
 ```
 
-プラグインとして入れることもできる。`.claude-plugin/marketplace.json` は
-Claude Code と Codex の両方が読む形式なので、マニフェストは 1 つで足りる。
+プラグインとして入れることもできる。同期 workflow は `skill-mart v1.0.1` を使い、
+Claude / Codex / ChatGPT / Cursor / GitHub Copilot 向けのカタログを生成する。
 plugin は配布元の repo ごとに分かれている (`claat` / `html-deck` / `usable-xlsm`)。
 
 ```console
@@ -65,7 +65,21 @@ codex plugin marketplace add https://github.com/nogikun/skills
 GitHub Actions は毎週月曜 06:00 JST と手動実行で配布元を同期し、更新 PR を作る。
 PR をマージしたあとに `upgrade` すると、その内容を取得できる。
 変更のある plugin だけ patch version を上げ、同じ内容での再実行では version を維持する。
-`.agents/plugins/marketplace.json` と `.claude-plugin/marketplace.json` は同じ名前・version を使う。
+4 種類のカタログは同じ名前・plugin ごとの version を使う。
+
+| 配布先 | カタログ |
+| --- | --- |
+| Claude | `.claude-plugin/marketplace.json` |
+| Codex / ChatGPT | `.agents/plugins/marketplace.json` |
+| Cursor | `.cursor-plugin/marketplace.json` |
+| GitHub Copilot | `.github/plugin/marketplace.json` |
+
+Cursor では GitHub リポジトリとして `https://github.com/nogikun/skills` を取り込む。
+GitHub Copilot CLI では次のように登録する。
+
+```console
+copilot plugin marketplace add nogikun/skills
+```
 
 Hermes Agent の Skills Hub でも使える。Hermes は repo 直下の `skills/` を custom tap として読む。
 初回だけ tap を追加すると、CLI と Web ダッシュボードの Browse hub / 検索から見えるようになる。

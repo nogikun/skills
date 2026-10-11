@@ -59,9 +59,11 @@ class SyncPluginsTests(unittest.TestCase):
     def test_catalog_and_manifests_keep_the_same_names_and_versions(self):
         self.assertEqual(self.sync(), 0)
         catalog = json.loads((self.root / ".claude-plugin" / "marketplace.json").read_text())
-        codex = json.loads((self.root / ".agents" / "plugins" / "marketplace.json").read_text())
-        self.assertEqual([(p["name"], p["version"]) for p in catalog["plugins"]],
-                         [(p["name"], p["version"]) for p in codex["plugins"]])
+        for directory in (".agents/plugins", ".cursor-plugin", ".github/plugin"):
+            other = json.loads((self.root / directory / "marketplace.json").read_text())
+            self.assertEqual(other["name"], catalog["name"])
+            self.assertEqual([(p["name"], p["version"]) for p in catalog["plugins"]],
+                             [(p["name"], p["version"]) for p in other["plugins"]])
         self.assertEqual([p["name"] for p in catalog["plugins"]], ["nogikun", "example"])
         for entry in catalog["plugins"]:
             plugin = None if entry["source"] == "./" else entry["name"]
@@ -86,6 +88,20 @@ class SyncPluginsTests(unittest.TestCase):
         self.assertEqual(self.manifest()["version"], "1.0.1")
         self.sync()
         self.assertEqual(self.manifest("example")["version"], "1.0.1")
+
+    def test_all_catalogs_follow_each_plugin_version_on_resync(self):
+        self.sync()
+        file = self.root / "plugins" / "example" / "plugin.json"
+        data = json.loads(file.read_text())
+        data["version"] = "2.3.9"
+        file.write_text(json.dumps(data))
+        (self.upstream / "SKILL.md").write_text("---\nname: demo\ndescription: Demo\n---\nUpdated\n")
+        for _ in range(2):
+            self.assertEqual(self.sync(), 0)
+            for directory in (".claude-plugin", ".agents/plugins", ".cursor-plugin", ".github/plugin"):
+                catalog = json.loads((self.root / directory / "marketplace.json").read_text())
+                self.assertEqual({p["name"]: p["version"] for p in catalog["plugins"]},
+                                 {"nogikun": "1.0.1", "example": "2.3.10"})
 
     def test_added_and_removed_files_bump_version(self):
         self.sync()

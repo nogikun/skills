@@ -52,7 +52,7 @@ def test_clean_removes_only_missing(tmp_path):
 def test_server_guards_and_docs(tmp_path):
     data = tmp_path / 'data'
     doc = make_doc(tmp_path / 'a.md')
-    other = make_doc(tmp_path / 'b.md')
+    other = make_doc(tmp_path / 'b.md', '# Math\n\n' + r'$\cat{C}$ の AWS と CloudFront。' + '\n')
     store.register(data, tmp_path / 'a.md')
     srv = server.make_server(data)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -81,6 +81,15 @@ def test_server_guards_and_docs(tmp_path):
     assert status == 200 and {r['doc_id'] for r in rows} == {doc['id'], other['id']}
     status, d = req('GET', f"/api/docs/{doc['id']}")
     assert d['annotations'][0]['id'] == 'ann_1' and '<h1>' in d['html']
+    from active_reader import nlp
+    status, d = req('GET', f"/api/docs/{other['id']}")
+    text = nlp.plain_text(d['html'])
+    utf16 = text.encode('utf-16-le')
+    assert len(utf16) // 2 > len(text)  # 太字 C はサロゲートペア。
+    assert d['boundaries'][-1] == len(utf16) // 2
+    for term in d['terms']:
+        assert utf16[term['start'] * 2:term['end'] * 2].decode('utf-16-le') == term['term']
+    assert 'AWS' in [t['term'] for t in d['terms']]
 
     # 文書からの相対パスの画像だけを配信する
     (tmp_path / 'img').mkdir()
@@ -100,6 +109,90 @@ def test_server_guards_and_docs(tmp_path):
     assert req('GET', base + 'secret.txt')[0] == 404
     assert req('GET', base + '../../../etc/passwd')[0] == 404
     srv.shutdown()
+
+
+def test_markdown_math():
+    from active_reader import nlp
+
+    markup = server.render('markdown', r'前 $\alpha^2 + \frac{1}{2} < 3$ 後の AWS。' + '\n\n$$\n' + r'\sum_{i=1}^{n} x_i' + '\n$$')
+    assert 'display="inline"' in markup and 'display="block"' in markup
+    assert '<msup>' in markup and '<mfrac>' in markup and '<munderover>' in markup
+    assert '<mi>α</mi>' in markup and '<mo>&lt;</mo>' in markup
+    text, code = nlp.parse(markup)
+    assert 'α' in text and '\\alpha' not in text
+    aws = next(t for t in nlp.terms(text, code) if t['term'] == 'AWS')
+    assert text[aws['start']:aws['end']] == 'AWS'
+    assert '<mtable' in server.render('markdown', r'$$\begin{aligned}a &= b \\ c &= d\end{aligned}$$')
+    assert '<mtable' in server.render('markdown', r'$$\begin{pmatrix}a & b \\ c & d\end{pmatrix}$$')
+    assert 'alt="$A$ から $B$"' in server.render('markdown', '![$A$ から $B$](diagram.png)')
+
+
+@pytest.mark.parametrize('source', [
+    r'`$x^2$`', '```tex\n$$x^2$$\n```', r'\$x\$',
+    '$5 and $10', '閉じていない $x',
+])
+def test_math_leaves_code_escaped_dollars_and_currency(source):
+    assert '<math' not in server.render('markdown', source)
+    assert '<math' not in server.render('text', '$x$')
+
+
+def test_math_errors_and_html_are_safe():
+    markup = server.render('markdown', r'前 $\left(x$ 後 $x^2$')
+    assert r'$\left(x$' in markup and 'display="inline"' in markup
+    assert '前' in markup and '後' in markup
+    for source in (
+        r'$\text{<img src=x onerror=alert(1)>}$',
+        r'$\text{</mtext><script>alert(1)</script>}$',
+        r'$\text{&lt;img src=x onerror=alert(1)&gt;}$',
+        r'$\color{red" onmouseover="alert(1)}{x}$',
+    ):
+        markup = server.render('markdown', source)
+        assert '<img' not in markup and '<script' not in markup
+        assert ' onmouseover="' not in markup
+
+
+def test_display_math_without_blank_lines_and_inside_paragraphs():
+    from active_reader import nlp
+
+    markup = server.render('markdown', '前の $a$。\n$$a + b$$\n後の $b$。')
+    assert markup.count('<math ') == 3 and 'display="block"' in markup
+    assert '<span class="math block">' in markup  # 段落内に div を入れない。
+    assert nlp.plain_text(markup) == '前の a。\na+b\n後の b。\n'
+    markup = server.render('markdown', '$$a+b$$ は $c$。')
+    assert markup.count('<math ') == 2
+    assert nlp.plain_text(markup) == 'a+b は c。\n'
+
+
+def test_math_and_code_pipes_in_tables():
+    from active_reader import nlp
+
+    table = '| Logic | Types |\n|---|---|\n' + r'| $a\,||\,b$ | `Left a | Right b` |' + '\n'
+    markup = server.render('markdown', table)
+    assert markup.count('<td>') == 2 and '<math ' in markup
+    assert 'a||b' in nlp.plain_text(markup)
+    assert '<code>Left a | Right b</code>' in markup
+    assert '<math ' not in server.render('markdown', '```md\n' + table + '```')
+    markup = server.render('markdown', r'| $\|x\|$ | `$a||b$` |' + '\n|---|---|\n')
+    assert markup.count('<th>') == 2 and markup.count('<math ') == 1
+    assert '<code>$a||b$</code>' in markup
+    assert '\u2016' in nlp.plain_text(markup)
+
+
+@pytest.mark.parametrize(('tex', 'text'), [
+    (r'\cat{C}', 'C'), (r'\Set', 'Set'), (r'\Rel', 'Rel'), (r'\Cat', 'Cat'),
+    (r'\Hask', 'Hask'), (r'\id', 'id'), (r'\idarrow', 'id'),
+    (r'\idarrow[A]', 'idA'), (r'\idarrow[F a]', 'idFa'),
+    (r'\Lim{D}', 'LimD'), (r'\Lim[D]', 'LimD'), (r'\Ran_K D', 'RanKD'), (r'\Lan_K D', 'LanKD'),
+    (r'\Fop', 'Fop'), (r'\Nat', 'Nat'),
+])
+def test_category_theory_math_aliases(tex, text):
+    import unicodedata
+    from xml.etree.ElementTree import fromstring
+
+    tree = fromstring(server._math(tex, {'display_mode': False}))
+    rendered = ''.join(tree.itertext())
+    assert unicodedata.normalize('NFKC', rendered) == text
+    assert rendered != text or any(el.get('mathvariant') in ('bold', 'italic') for el in tree.iter())
 
 
 def test_cli_set_and_noninteractive_delete(tmp_path, monkeypatch, capsys):

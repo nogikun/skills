@@ -30,7 +30,7 @@ class _Text(HTMLParser):
 
 
 def parse(markup):
-    """(ブラウザの #reader.textContent と同じ文字列, コード部分の範囲)。offset を UI と共有する。"""
+    """(ブラウザの #reader.textContent と同じ文字列, コード部分の範囲)。offset は Python の文字単位。"""
     p = _Text()
     p.feed(markup)
     p.close()

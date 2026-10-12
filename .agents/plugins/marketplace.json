@@ -16,7 +16,7 @@
         "authentication": "ON_INSTALL"
       },
       "category": "Productivity",
-      "version": "1.0.1"
+      "version": "1.0.2"
     },
     {
       "name": "aws-architecture",
@@ -114,7 +114,7 @@
         "authentication": "ON_INSTALL"
       },
       "category": "Productivity",
-      "version": "1.0.3"
+      "version": "1.0.4"
     }
   ]
 }

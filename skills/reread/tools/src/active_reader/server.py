@@ -67,7 +67,7 @@ def _math(content, options):
         tex = re.sub(r'\\[A-Za-z]+', lambda m: MATH_ALIASES.get(m[0], m[0]), tex)
         tree = Converter(display='block' if display else 'inline').convert_to_element(tex)
     except Exception:  # 不正な TeX があっても本文全体を読めなくしない。
-        dollars = '$$' if display else '$'
+        dollars = options.get('markup', '$$' if display else '$')
         return f'<code title="数式を変換できませんでした">{html.escape(dollars + content + dollars)}</code>'
     # 記号の文字参照だけデコードし、TeX 内の HTML は XML として安全にエスケープする。
     for element in tree.iter():
@@ -77,8 +77,13 @@ def _math(content, options):
 
 
 def _math_inline_double(self, tokens, idx, options, env):
-    # 段落内の $$ は span にして、ブラウザの段落補正で文字位置が変わるのを避ける。
-    return '<span class="math block">' + _math(tokens[idx].content.strip(), {'display_mode': True}) + '</span>'
+    # 独立した行の式だけ別行にし、段落内では本文と同じ行に表示する。
+    breaks = {'softbreak', 'hardbreak'}
+    display = (idx == 0 or tokens[idx - 1].type in breaks) and (
+        idx + 1 == len(tokens) or tokens[idx + 1].type in breaks)
+    kind = 'block' if display else 'inline'
+    return f'<span class="math {kind}">' + _math(
+        tokens[idx].content.strip(), {'display_mode': display, 'markup': tokens[idx].markup}) + '</span>'
 
 
 def _table_pipes(state):

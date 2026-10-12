@@ -109,6 +109,10 @@ li:hover .row-action, .row-action:focus-visible { opacity: 1; }
 #reader h2 { font-size: 1.35rem; margin-top: 2.5rem; }
 #reader pre { overflow-x: auto; background: var(--side); padding: 1rem 1.25rem; border-radius: 12px; font-size: .85rem; line-height: 1.6; }
 #reader code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+#reader .math.block { display: block; overflow-x: auto; overflow-y: hidden; margin: 1.25rem 0; padding: .5rem 0; }
+#reader .math.block code { white-space: pre-wrap; }
+#reader math [mathvariant="bold"] { font-weight: bold; font-style: normal; text-transform: none; }
+#reader math [mathvariant="italic"] { font-style: italic; text-transform: none; }
 #reader a { color: var(--accent); }
 #reader img { max-width: 100%; height: auto; border-radius: 8px; }
 #reader table { border-collapse: collapse; }

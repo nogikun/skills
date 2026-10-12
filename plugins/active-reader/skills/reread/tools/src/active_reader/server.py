@@ -9,8 +9,15 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from pathlib import Path
+from xml.etree.ElementTree import tostring
 
+from latex2mathml.converter import Converter
 from markdown_it import MarkdownIt
+from markdown_it.rules_block.table import headerLineRe
+from markdown_it.rules_inline.backticks import backtick
+from markdown_it.rules_inline.state_inline import StateInline
+from mdit_py_plugins.dollarmath import dollarmath_plugin
+from mdit_py_plugins.dollarmath.index import math_inline_dollar
 
 from . import nlp, store
 
@@ -27,6 +34,11 @@ GLOSSARY = re.compile(r'^/api/docs/(doc_[0-9a-f]{12})/(glossary|annotations)$')
 IMAGES = {'.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.avif', '.bmp', '.ico'}
 EXTERNAL = re.compile(r'^([a-z][a-z0-9+.-]*:|/|#)', re.I)  # https: / data: / 絶対パス / アンカー
 HOSTS = ('127.0.0.1', 'localhost')
+# CTFP の category.tex で使われる圏論の略記。
+MATH_ALIASES = {
+    **{rf'\{name}': rf'\mathbf{{{name}}}' for name in ('Set', 'Rel', 'Cat', 'Hask', 'id', 'Lim', 'Ran', 'Lan')},
+    r'\cat': r'\mathbf', r'\Fop': r'\mathbf{F}^{\mathit{op}}', r'\Nat': r'\mathit{Nat}',
+}
 
 
 def _image(self, tokens, idx, options, env):
@@ -36,13 +48,82 @@ def _image(self, tokens, idx, options, env):
     src = tok.attrGet('src') or ''
     if env.get('files') and not EXTERNAL.match(src):
         tok.attrSet('src', f"{env['files']}?p={urllib.parse.quote(src, safe='%/')}")
+    # image の代替テキスト描画は math トークンを無視するため、元の表記を保つ。
+    for child in tok.children or []:
+        if child.type.startswith('math_inline'):
+            child.type = 'text'
+            child.content = child.markup + child.content + child.markup
     return self.image(tokens, idx, options, env)
+
+
+def _math(content, options):
+    display = options['display_mode']
+    try:
+        # latex2mathml の複数行整列は align* で扱う。
+        tex = content.replace(r'\begin{aligned}', r'\begin{align*}').replace(r'\end{aligned}', r'\end{align*}')
+        tex = re.sub(r'\\idarrow\b(?:\s*\[([^\]]*)\])?',
+                     lambda m: r'\mathbf{id}' + ('_{' + m[1] + '}' if m[1] else ''), tex)
+        tex = re.sub(r'\\Lim\s*\[([^\]]*)\]', lambda m: r'\Lim{' + m[1] + '}', tex)
+        tex = re.sub(r'\\[A-Za-z]+', lambda m: MATH_ALIASES.get(m[0], m[0]), tex)
+        tree = Converter(display='block' if display else 'inline').convert_to_element(tex)
+    except Exception:  # 不正な TeX があっても本文全体を読めなくしない。
+        dollars = '$$' if display else '$'
+        return f'<code title="数式を変換できませんでした">{html.escape(dollars + content + dollars)}</code>'
+    # 記号の文字参照だけデコードし、TeX 内の HTML は XML として安全にエスケープする。
+    for element in tree.iter():
+        if element.text:
+            element.text = html.unescape(element.text)
+    return tostring(tree, encoding='unicode', short_empty_elements=False)
+
+
+def _math_inline_double(self, tokens, idx, options, env):
+    # 段落内の $$ は span にして、ブラウザの段落補正で文字位置が変わるのを避ける。
+    return '<span class="math block">' + _math(tokens[idx].content.strip(), {'display_mode': True}) + '</span>'
+
+
+def _table_pipes(state):
+    # Pandoc の表では数式・コード中の | を列区切りにしない。
+    if '|' not in state.src:
+        return
+    tokens = []
+    state.md.block.parse(state.src, state.md, {}, tokens)
+    lines = state.src.split('\n')
+    math_rule = math_inline_dollar(allow_space=False, allow_digits=False, allow_double=True)
+    tables = [token.map for token in tokens if token.type == 'table_open']
+    # 見出しに未エスケープの | がある表は、最初の解析では段落になる。
+    for token in tokens:
+        if token.type != 'inline' or not token.map:
+            continue
+        for i in range(token.map[0], token.map[1] - 1):
+            columns = lines[i + 1].strip().strip('|').split('|')
+            if '|' in lines[i] and all(headerLineRe.fullmatch(c.strip()) for c in columns):
+                tables.append([i, token.map[1]])
+    for start_line, end_line in tables:
+        for i in range(start_line, end_line):
+            line = lines[i]
+            if '|' not in line:
+                break
+            inline = StateInline(line, state.md, state.env, [])
+            parts, cursor = [], 0
+            while inline.pos < inline.posMax:
+                start = inline.pos
+                if not (math_rule(inline, True) or backtick(inline, True)):
+                    state.md.inline.skipToken(inline)
+                    continue
+                parts.extend((line[cursor:start], line[start:inline.pos].replace('|', r'\|')))
+                cursor = inline.pos
+            lines[i] = ''.join(parts) + line[cursor:]
+    state.src = '\n'.join(lines)
 
 
 def render(kind, text, doc_id=None):
     if kind == 'markdown':
         # html: False で文書中の生 HTML を無効化（XSS 対策）
         md = MarkdownIt('commonmark', {'html': False}).enable(['table', 'strikethrough'])
+        md.use(dollarmath_plugin, allow_labels=False, allow_digits=False, allow_space=False,
+               double_inline=True, renderer=_math)
+        md.add_render_rule('math_inline_double', _math_inline_double)
+        md.core.ruler.before('block', 'table_pipes', _table_pipes)
         md.add_render_rule('image', _image)
         return md.render(text, {'files': doc_id and f'/api/docs/{doc_id}/file'})
     return f'<pre>{html.escape(text)}</pre>'
@@ -213,10 +294,15 @@ def make_server(data_dir, port=0):
                 except (LookupError, OSError) as e:
                     return self.send(404, {'error': str(e)})
                 text, code = nlp.parse(markup)
+                # 数学用の太字なども含め、UI の文字位置は JavaScript の UTF-16 単位で返す。
+                offsets = [0]
+                for char in text:
+                    offsets.append(offsets[-1] + (2 if ord(char) > 0xffff else 1))
                 return self.send(200, {
                     'document': doc, 'html': markup, 'annotations': rec['annotations'],
-                    'boundaries': nlp.boundaries(text),
-                    'terms': nlp.terms(text, code),
+                    'boundaries': [offsets[i] for i in nlp.boundaries(text)],
+                    'terms': [{**t, 'start': offsets[t['start']], 'end': offsets[t['end']]}
+                              for t in nlp.terms(text, code)],
                     'glossary': rec.get('glossary', {}),
                 })
             self.send(404, {'error': 'not found'})

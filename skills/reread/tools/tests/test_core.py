@@ -140,6 +140,8 @@ def test_math_errors_and_html_are_safe():
     markup = server.render('markdown', r'前 $\left(x$ 後 $x^2$')
     assert r'$\left(x$' in markup and 'display="inline"' in markup
     assert '前' in markup and '後' in markup
+    markup = server.render('markdown', r'前 $$\left(x$$ 後 $$x^2$$')
+    assert r'$$\left(x$$' in markup and 'display="inline"' in markup
     for source in (
         r'$\text{<img src=x onerror=alert(1)>}$',
         r'$\text{</mtext><script>alert(1)</script>}$',
@@ -160,7 +162,25 @@ def test_display_math_without_blank_lines_and_inside_paragraphs():
     assert nlp.plain_text(markup) == '前の a。\na+b\n後の b。\n'
     markup = server.render('markdown', '$$a+b$$ は $c$。')
     assert markup.count('<math ') == 2
+    assert 'display="block"' not in markup
     assert nlp.plain_text(markup) == 'a+b は c。\n'
+
+
+@pytest.mark.parametrize('prefix', ['', '> ', '- ', '| 本文 |\n|---|\n| '])
+def test_double_dollar_math_in_prose_is_inline(prefix):
+    from active_reader import nlp
+
+    source = ('たとえば、0を含む自然数は加算についてモノイドをなす。'
+              '結合律は次のことを意味する。 $$(a + b) + c = a + (b + c)$$ '
+              '（言い換えると、数を加算するときは括弧を無視できる。）')
+    markup = server.render('markdown', prefix + source)
+    assert markup.count('<math ') == 1 and 'display="inline"' in markup
+    assert 'math block' not in markup and '$$' not in markup
+    assert source.replace('$$(a + b) + c = a + (b + c)$$', '(a+b)+c=a+(b+c)') in nlp.plain_text(markup)
+
+    markup = server.render('markdown', '中立元は0。なぜなら $$0 + a = a$$ かつ $$a + 0 = a$$ だからだ。')
+    assert markup.count('display="inline"') == 2 and 'math block' not in markup
+    assert nlp.plain_text(markup) == '中立元は0。なぜなら 0+a=a かつ a+0=a だからだ。\n'
 
 
 def test_math_and_code_pipes_in_tables():

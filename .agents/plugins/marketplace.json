@@ -75,6 +75,20 @@
       "version": "1.0.0"
     },
     {
+      "name": "presenter",
+      "description": "Skills: presentation-ja, presenter, presenter-setup",
+      "source": {
+        "source": "local",
+        "path": "./plugins/presenter"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity",
+      "version": "1.0.0"
+    },
+    {
       "name": "scribe",
       "description": "会議の動画・音声ファイル (mp4/mov/mkv/webm/mp3/m4a/wav/flac/ogg など、パスを渡すだけ) を話者分離つきで日本語文字起こしし、話者に名前を付けて議事録 (Markdown) や字幕 (WebVTT / SRT)、テキスト、JSON に書き出すスキル。同梱の Scribe CLI (NVIDIA Nemotron 3 Diarization + faster-whisper) を uv で実行する。「会議を文字起こしして」「この mp4/m4a/wav を書き起こして」「誰が何を話したか分けて」「議事録の元データを作って」「字幕 (vtt/srt) を作って」「話者の名前を付け直して」「さっきの議事録の話者名が違うので直して」「前回のジョブを書き出して」といった依頼では、ファイル形式や『Scribe』という名前が出ていなくても必ずこのスキルを使うこと。Zoom/Teams/Meet の録画、インタビュー、打ち合わせ音声の話者識別・話者分離の確認や、文字起こしジョブの再開・状態確認・一覧にも使う。",
       "source": {
@@ -104,7 +118,7 @@
     },
     {
       "name": "nogikun",
-      "description": "Skills: arch-builder, aws-drawio-import, claat-creator, html-deck, reread, scribe, usable-xlsm",
+      "description": "Skills: arch-builder, aws-drawio-import, claat-creator, html-deck, presentation-ja, presenter, presenter-setup, reread, scribe, usable-xlsm",
       "source": {
         "source": "local",
         "path": "./"
@@ -114,7 +128,7 @@
         "authentication": "ON_INSTALL"
       },
       "category": "Productivity",
-      "version": "1.0.5"
+      "version": "1.0.6"
     }
   ]
 }

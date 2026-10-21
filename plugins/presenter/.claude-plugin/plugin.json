@@ -1,0 +1,11 @@
+{
+  "name": "presenter",
+  "version": "1.0.0",
+  "description": "",
+  "author": {
+    "name": "nogikun",
+    "url": "https://github.com/nogikun"
+  },
+  "repository": "https://github.com/nogikun/presenter",
+  "skills": "./skills/"
+}

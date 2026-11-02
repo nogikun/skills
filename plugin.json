@@ -1,6 +1,6 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "nogikun",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Skills: arch-builder, aws-drawio-import, claat-creator, html-deck, presentation-ja, presenter, presenter-setup, reread, scribe, usable-xlsm"
 }

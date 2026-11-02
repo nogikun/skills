@@ -86,7 +86,7 @@
         "authentication": "ON_INSTALL"
       },
       "category": "Productivity",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "name": "scribe",
@@ -128,7 +128,7 @@
         "authentication": "ON_INSTALL"
       },
       "category": "Productivity",
-      "version": "1.0.6"
+      "version": "1.0.7"
     }
   ]
 }

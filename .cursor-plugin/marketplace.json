@@ -42,7 +42,7 @@
       "name": "presenter",
       "source": "./plugins/presenter",
       "description": "Skills: presentation-ja, presenter, presenter-setup",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "name": "scribe",
@@ -60,7 +60,7 @@
       "name": "nogikun",
       "source": "./",
       "description": "Skills: arch-builder, aws-drawio-import, claat-creator, html-deck, presentation-ja, presenter, presenter-setup, reread, scribe, usable-xlsm",
-      "version": "1.0.6"
+      "version": "1.0.7"
     }
   ]
 }

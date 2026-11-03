@@ -72,7 +72,7 @@
         "authentication": "ON_INSTALL"
       },
       "category": "Productivity",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "name": "presenter",
@@ -86,7 +86,7 @@
         "authentication": "ON_INSTALL"
       },
       "category": "Productivity",
-      "version": "1.0.1"
+      "version": "1.0.2"
     },
     {
       "name": "scribe",
@@ -100,7 +100,7 @@
         "authentication": "ON_INSTALL"
       },
       "category": "Productivity",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "name": "usable-xlsm",
@@ -128,7 +128,7 @@
         "authentication": "ON_INSTALL"
       },
       "category": "Productivity",
-      "version": "1.0.7"
+      "version": "1.0.8"
     }
   ]
 }

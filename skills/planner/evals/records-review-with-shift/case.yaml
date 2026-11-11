@@ -1,0 +1,8 @@
+schema_version: "1.1"
+name: records-review-with-shift
+expected_outcome: |
+  2026-11-18 の実績を記録する。設計は 9:00〜10:45（完了）、後続のレビューと資料作成は
+  45 分ずれた実績（10:45〜11:45 完了、11:45〜12:45 一部）になる。予定時刻は変えない。
+  日の状態を振り返り済みにし、見積もりのずれと、資料作成の残りの持ち越しを短く提案する。
+context:
+  scaffold_script: place-files.sh

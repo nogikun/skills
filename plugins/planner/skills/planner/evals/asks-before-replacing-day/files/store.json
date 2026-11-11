@@ -1,0 +1,54 @@
+{
+  "rev": 2,
+  "store": {
+    "days": {
+      "2026-11-19": {
+        "date": "2026-11-19",
+        "rangeStart": 540,
+        "rangeEnd": 1080,
+        "status": "draft",
+        "activities": [
+          {
+            "id": "df8207a3-478f-474a-bcc8-7b7fc260355f",
+            "order": 0,
+            "title": "朝の整理",
+            "memo": "",
+            "planStart": 540,
+            "planEnd": 570,
+            "actualStart": null,
+            "actualEnd": null,
+            "status": ""
+          },
+          {
+            "id": "8f58b63f-b03c-40f7-846c-eaf98a76cde3",
+            "order": 1,
+            "title": "顧客対応",
+            "memo": "",
+            "planStart": 570,
+            "planEnd": 630,
+            "actualStart": 570,
+            "actualEnd": 645,
+            "status": "done"
+          },
+          {
+            "id": "3fc32983-f553-4e08-a111-3b10cc24a749",
+            "order": 2,
+            "title": "開発",
+            "memo": "",
+            "planStart": 780,
+            "planEnd": 960,
+            "actualStart": null,
+            "actualEnd": null,
+            "status": ""
+          }
+        ]
+      }
+    },
+    "rules": [],
+    "colors": {
+      "朝の整理": 0,
+      "顧客対応": 1,
+      "開発": 2
+    }
+  }
+}

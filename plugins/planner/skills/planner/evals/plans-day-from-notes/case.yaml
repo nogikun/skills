@@ -1,0 +1,9 @@
+schema_version: "1.1"
+name: plans-day-from-notes
+expected_outcome: |
+  メモから 2026-11-20 の予定を組み、作業フォルダの store.json に書き込む。
+  14:00〜15:00 の定例を固定で置き、締め切りが今日の見積もり資料を午前など早めに入れ、
+  昼の 12:00〜13:00 を空け、急ぎでない採用計画は今日はやらないこととして扱う。
+  書き込む前に plan --dry-run で確かめ、最後に入れた内容と「今日やり切ること」を短く伝える。
+context:
+  scaffold_script: place-files.sh

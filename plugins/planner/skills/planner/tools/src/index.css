@@ -1,0 +1,352 @@
+/* Apple Human Interface Guidelines（Liquid Glass）
+   半透明のガラス素材（背景のぼかし＋縁の光沢＋柔らかい影）の部品を、淡い色の背景の上に浮かせる。
+   色はシステムカラー、書体はシステムの書体（SF Pro / ヒラギノ）を使う
+   色は light-dark(ライト, ダーク) で書く。どちらを使うかは color-scheme で決まり、
+   既定は端末の設定に従い、切り替えボタンで選ぶと data-theme で固定する */
+:root {
+  color-scheme: light dark;
+  --label: light-dark(#000, #fff);
+  --label2: light-dark(rgb(60 60 67 / .6), rgb(235 235 245 / .6));
+  --label3: light-dark(rgb(60 60 67 / .3), rgb(235 235 245 / .3));
+  --separator: light-dark(rgb(60 60 67 / .18), rgb(84 84 88 / .55));
+  --fill: light-dark(rgb(120 120 128 / .12), rgb(120 120 128 / .24)); /* 区切り・トラックの塗り */
+  --fill2: light-dark(rgb(120 120 128 / .2), rgb(120 120 128 / .36));
+  --blue: light-dark(#007aff, #0a84ff);
+  --red: light-dark(#ff3b30, #ff453a);
+  --green: light-dark(#34c759, #30d158);
+  --thumb: light-dark(#fff, rgb(255 255 255 / .2)); /* セグメントの選択中の面 */
+  --base: light-dark(#f2f2f7, #000);
+
+  /* ガラス */
+  --glass: light-dark(rgb(255 255 255 / .58), rgb(44 44 48 / .55));
+  --glass-strong: light-dark(rgb(255 255 255 / .78), rgb(40 40 44 / .82)); /* 文字を多く載せる面（ダイアログ・メニュー） */
+  --glass-edge: light-dark(rgb(255 255 255 / .75), rgb(255 255 255 / .14));
+  --glass-blur: blur(24px) saturate(180%);
+  --glass-shadow:
+    0 10px 30px light-dark(rgb(0 0 0 / .1), rgb(0 0 0 / .45)), 0 1px 3px light-dark(rgb(0 0 0 / .06), transparent),
+    inset 0 1px 0 light-dark(rgb(255 255 255 / .85), rgb(255 255 255 / .16)), inset 0 -1px 0 light-dark(rgb(255 255 255 / .25), rgb(255 255 255 / .04));
+  --thumb-shadow:
+    0 3px 8px light-dark(rgb(0 0 0 / .12), rgb(0 0 0 / .35)), 0 1px 1px light-dark(rgb(0 0 0 / .04), transparent),
+    inset 0 1px 0 light-dark(rgb(255 255 255 / .9), rgb(255 255 255 / .22));
+
+  /* 既存のクラスが使う名前を割り当てる */
+  --bg: transparent;
+  --text: var(--label);
+  --text2: var(--label2);
+  --text3: var(--label3);
+  --line: var(--separator);
+  --outline: var(--separator);
+  --primary: var(--blue);
+  --on-primary: #fff;
+  --error: var(--red);
+  --good: var(--green);
+  --hover: var(--fill);
+  --surface-hi: var(--glass-strong);
+
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', system-ui, sans-serif;
+  --lg-tint: light-dark(rgb(255 255 255 / .32), rgb(30 30 34 / .4)); /* 屈折ガラスに重ねる薄い色（文字を読みやすくする） */
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.43;
+  letter-spacing: -.01em;
+  color: var(--label);
+  -webkit-font-smoothing: antialiased;
+}
+/* 切り替えボタンで選んだときは、端末の設定より優先する */
+:root[data-theme='light'] { color-scheme: light; }
+:root[data-theme='dark'] { color-scheme: dark; }
+/* 透明度を下げる設定のときは、ガラスを不透明な面にする */
+@media (prefers-reduced-transparency: reduce) {
+  :root { --glass: var(--base); --glass-strong: var(--base); --glass-blur: none; }
+}
+
+* { box-sizing: border-box; }
+/* ガラスの透け感が分かるよう、背景に淡い色をにじませる */
+body {
+  margin: 0;
+  background:
+    radial-gradient(1100px 650px at 0% -10%, color-mix(in srgb, var(--blue) 20%, transparent), transparent 60%),
+    radial-gradient(900px 600px at 105% 5%, rgb(175 82 222 / .16), transparent 60%),
+    radial-gradient(900px 600px at 60% 115%, rgb(52 199 89 / .12), transparent 60%),
+    var(--base);
+  background-attachment: fixed;
+}
+h1 { font-size: 20px; line-height: 24px; font-weight: 600; letter-spacing: -.02em; margin: 0 0 0 6px; white-space: nowrap; }
+h2 { font-size: 17px; line-height: 22px; font-weight: 600; margin: 0 0 12px; } /* Headline */
+
+/* ガラス素材 */
+.sidebar, .panel, .cal, .week, .ctxmenu, dialog, .info .tip {
+  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-edge); box-shadow: var(--glass-shadow);
+}
+
+/* レイアウト: 浮いたツールバー + サイドバー + メイン */
+.app { display: grid; grid-template-columns: 268px 1fr; grid-template-rows: 72px 1fr; height: 100vh; }
+.topbar-slot { grid-column: 1 / -1; margin: 12px 12px 8px; position: relative; z-index: 5; }
+.topbar { display: flex; align-items: center; gap: 4px; width: 100%; height: 100%; padding: 0 6px; }
+
+/* 屈折ガラス（liquid-glass-react）の枠と中身。ライブラリが中身に付ける 20px の書体と文字の影を戻す */
+.lg-slot { position: relative; flex: none; }
+.lg-content {
+  display: flex; align-items: center; background: var(--lg-tint); color: var(--label); text-shadow: none;
+  font-family: var(--font); font-size: 14px; line-height: 1.43; font-weight: 400; letter-spacing: -.01em;
+}
+.lg-slot .glass { box-shadow: 0 8px 24px rgb(0 0 0 / .14) !important; }
+.create-slot { margin-bottom: 16px; }
+.brand { display: flex; align-items: center; gap: 8px; width: 200px; flex: none; font-size: 17px; font-weight: 600; color: var(--label); white-space: nowrap; }
+.brand-icon { color: var(--blue); flex: none; }
+.sidebar { margin: 0 0 12px 12px; padding: 14px 12px; border-radius: 16px; overflow-y: auto; }
+main { overflow-y: auto; padding: 0 12px 24px 12px; }
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar, .brand { display: none; }
+}
+
+/* ボタン。既定は文字だけのボタン、.primary は塗り（Prominent）、.outlined はガラスの枠付き */
+:where(button, .button):hover:not(:disabled) { background-color: var(--fill); }
+button, .button {
+  position: relative; font: inherit; font-weight: 500; color: var(--blue); background: transparent;
+  border: 0; border-radius: 8px; padding: 0 12px; height: 32px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  transition: transform .15s ease, background-color .15s ease, box-shadow .15s ease;
+}
+button:active:not(:disabled) { transform: scale(.97); } /* 押すと少し縮む */
+button:disabled { color: var(--label3); cursor: default; }
+button.primary {
+  background: var(--blue); color: #fff; padding: 0 20px; font-weight: 600;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--blue) 35%, transparent), inset 0 1px 0 rgb(255 255 255 / .35);
+}
+button.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--blue) 90%, #fff); }
+button.primary:disabled { background: var(--fill2); color: var(--label3); box-shadow: none; }
+button.outlined {
+  color: var(--label); padding: 0 16px; margin-right: 6px;
+  background: var(--glass); border: 1px solid var(--glass-edge); box-shadow: var(--thumb-shadow);
+}
+button.icon { width: 32px; height: 32px; padding: 0; color: var(--label2); }
+button.icon.small { width: 28px; height: 28px; }
+button.danger { color: var(--red); }
+/* 作成（目立たせる主ボタン） */
+button.create {
+  width: 100%; height: 100%; border-radius: 22px; padding: 0 18px 0 12px; gap: 6px; font-weight: 600;
+  background: color-mix(in srgb, var(--blue) 82%, transparent); color: #fff;
+}
+button.create:hover { background: color-mix(in srgb, var(--blue) 92%, transparent); }
+
+/* テキストフィールド */
+input, select, textarea {
+  font: inherit; color: var(--label); background: var(--fill);
+  border: 0; border-radius: 7px; padding: 6px 10px; min-height: 32px;
+  transition: box-shadow .15s ease;
+}
+/* 時刻の選択（ポップアップボタン）。開くと端末の標準のメニューで一覧が出る */
+select {
+  appearance: none; cursor: pointer; padding-right: 30px; font-variant-numeric: tabular-nums;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 9l4-4 4 4M8 15l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 8px center; background-size: 16px;
+}
+select:hover { background-color: var(--fill2); }
+input:focus, select:focus, textarea:focus { outline: 0; box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 45%, transparent); }
+textarea { resize: vertical; }
+/* キーボードで選んだ所の表示 */
+:focus-visible { outline: 3px solid color-mix(in srgb, var(--blue) 55%, transparent); outline-offset: 2px; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 0; }
+
+.bar, .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bar { margin-bottom: 12px; }
+.spacer { flex: 1; }
+.panel { border-radius: 16px; padding: 16px; margin-bottom: 14px; }
+.hint, .empty { color: var(--label2); font-size: 12px; margin: 4px 0; }
+.empty { font-size: 14px; text-align: center; padding: 24px 0; }
+
+/* i マークの説明 */
+.info { position: relative; display: inline-flex; color: var(--label2); cursor: help; border-radius: 50%; }
+.info .tip {
+  position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); z-index: 10;
+  width: max-content; max-width: 260px; padding: 6px 10px; border-radius: 8px; background: var(--glass-strong);
+  color: var(--label); font-size: 12px; line-height: 1.5;
+  opacity: 0; visibility: hidden; transition: opacity .15s; pointer-events: none;
+}
+.info:hover .tip, .info:focus-visible .tip { opacity: 1; visibility: visible; }
+
+/* 確認・通知（アラート）: 文は中央、ボタンは横いっぱいに並べる */
+dialog.ask { width: min(320px, 92vw); padding: 22px 18px 16px; text-align: center; }
+dialog.ask p { margin: 0 0 18px; font-size: 14px; line-height: 1.5; }
+dialog.ask .row { flex-wrap: nowrap; }
+dialog.ask .row button { flex: 1; background: var(--fill); }
+dialog.ask .row button.primary { background: var(--blue); }
+dialog.ask .row button.danger { background: color-mix(in srgb, var(--red) 14%, transparent); }
+
+/* つないだボタン（日／週／月、計画／振り返り、開始／終了）: セグメントコントロール。
+   トラックの上で、選んでいる側にガラスの面（つまみ）が乗る */
+.viewswitch, .tabs, .segmented { display: inline-flex; gap: 2px; padding: 2px; background: var(--fill); border-radius: 8px; }
+.tabs { margin-left: auto; }
+.viewswitch button, .tabs button { color: var(--label); height: 28px; border-radius: 6px; padding: 0 16px; font-weight: 500; }
+.viewswitch button[aria-selected='true'], .tabs button[aria-selected='true'] { background: var(--thumb); box-shadow: var(--thumb-shadow); font-weight: 600; }
+.segmented label { position: relative; display: block; }
+.segmented input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; min-height: 0; z-index: 1; }
+.segmented span { display: inline-flex; align-items: center; height: 28px; padding: 0 14px; border-radius: 6px; font-size: 14px; font-weight: 500; transition: background-color .15s, box-shadow .15s; }
+.segmented label:hover input:not(:checked) + span { background: var(--fill); }
+.segmented input:checked + span { background: var(--thumb); box-shadow: var(--thumb-shadow); font-weight: 600; }
+.segmented input:focus-visible + span { outline: 3px solid color-mix(in srgb, var(--blue) 55%, transparent); }
+/* 曜日の繰り返し: 丸いトグル */
+.segmented.multi { background: none; padding: 0; gap: 6px; }
+.segmented.multi span { width: 30px; height: 30px; padding: 0; border-radius: 8px; justify-content: center; background: var(--fill); color: var(--label2); font-size: 12px; }
+.segmented.multi input:checked + span { background: var(--blue); color: #fff; box-shadow: 0 2px 8px color-mix(in srgb, var(--blue) 35%, transparent); }
+
+.badge { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 6px; background: var(--fill); color: var(--label2); font-size: 12px; font-weight: 600; }
+.badge.planned { background: color-mix(in srgb, var(--blue) 16%, transparent); color: var(--blue); }
+.badge.reviewed { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green); }
+
+/* 日次 */
+.daybody { display: grid; grid-template-columns: 320px 1fr; gap: 14px; align-items: start; }
+@media (max-width: 1100px) { .daybody { grid-template-columns: 1fr; } }
+.clockpanel { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.clock { width: 280px; height: 280px; cursor: ns-resize; touch-action: none; border-radius: 50%; }
+.clock .face { fill: transparent; }
+.clock.night .face { fill: color-mix(in srgb, var(--label) 6%, transparent); }
+.clock .track { fill: none; stroke: var(--fill); stroke-width: 16; }
+.clock .range { fill: none; stroke: var(--blue); stroke-width: 2; opacity: .5; } /* 時間帯設定 */
+.clock line.boundary { stroke: var(--label3); stroke-width: 1; stroke-dasharray: 2 3; }
+.clock .hour.boundary { font-weight: 700; fill: var(--label); }
+.clock .track.inner { stroke-width: 12; }
+.clock .arc { fill: none; stroke-width: 14; opacity: .55; }
+.clock .arc.draft { stroke: var(--blue); stroke-width: 18; opacity: 1; stroke-linecap: round; }
+.clock .arc.draft.lap { stroke: color-mix(in srgb, var(--blue) 40%, #fff); stroke-linecap: butt; } /* 12時間を超えた予定の1周目 */
+.clock .tick { stroke: var(--label3); }
+.clock .hour { fill: var(--label2); font-size: 11px; text-anchor: middle; dominant-baseline: middle; }
+.clock .hand { stroke: var(--label); stroke-width: 2.5; stroke-linecap: round; }
+.clock .hub { fill: var(--label); }
+.draft-time { margin: 0; display: flex; align-items: baseline; gap: 8px; font-variant-numeric: tabular-nums; }
+.draft-time b { font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+.draft-time span { color: var(--label2); font-size: 13px; }
+
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 10px 8px; border-bottom: .5px solid var(--separator); text-align: left; white-space: nowrap; }
+th { font-weight: 500; color: var(--label2); font-size: 12px; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--fill); }
+tr.sel, tr.sel:hover { background: color-mix(in srgb, var(--blue) 16%, transparent); }
+tfoot td { font-weight: 600; border-bottom: 0; }
+td.memo { white-space: normal; color: var(--label2); max-width: 240px; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.over { color: var(--red); }
+.under { color: var(--green); }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; }
+.repeat { color: var(--label3); margin-left: 6px; vertical-align: -2px; }
+
+/* 月間カレンダー: ガラスの面に罫線、今日は赤い丸（カレンダー App と同じ） */
+.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-radius: 16px; overflow: hidden; margin-bottom: 14px; }
+.wd, .cell { border-right: .5px solid var(--separator); border-bottom: .5px solid var(--separator); }
+.wd:nth-child(7n), .cell:nth-child(7n) { border-right: 0; }
+.wd { text-align: center; color: var(--label2); font-size: 11px; font-weight: 600; padding-top: 10px; border-bottom: 0; }
+.wd:first-child { color: var(--red); }
+.cell {
+  min-height: 112px; height: auto; padding: 4px 4px 6px; border-radius: 0; background: transparent; color: var(--label);
+  display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 1px; font-weight: 400;
+}
+.cell-head { display: flex; justify-content: center; align-items: center; position: relative; margin-bottom: 2px; }
+.dnum { min-width: 24px; height: 24px; line-height: 24px; border-radius: 12px; font-size: 13px; font-weight: 500; text-align: center; }
+.cell.today .dnum { background: var(--red); color: #fff; font-weight: 600; }
+.pie { align-self: center; width: 60px; height: 60px; margin-top: 2px; border-radius: 50%; mask: radial-gradient(circle, transparent 50%, #000 52%); }
+.mins { align-self: center; font-size: 11px; color: var(--label2); font-variant-numeric: tabular-nums; }
+.dot { position: absolute; right: 6px; width: 6px; height: 6px; border-radius: 50%; }
+.dot.planned { background: var(--blue); }
+.dot.reviewed { background: var(--green); }
+
+/* 週表示（Teams の予定表のような時間割） */
+.week { display: flex; flex-direction: column; height: calc(100vh - 72px - 24px); border-radius: 16px; overflow: hidden; }
+/* 本文のスクロールバーの分だけ見出しにも余白を取り、列をそろえる */
+.wk-head { display: grid; border-bottom: .5px solid var(--separator); overflow: hidden; scrollbar-gutter: stable; }
+.wk-day {
+  height: auto; border-radius: 0; padding: 8px 4px; color: var(--label); border-left: .5px solid var(--separator);
+  display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0;
+}
+.wk-wd { font-size: 11px; color: var(--label2); font-weight: 600; }
+.wk-num { width: 34px; height: 34px; line-height: 34px; border-radius: 50%; font-size: 20px; font-weight: 500; text-align: center; }
+.wk-day.today .wk-wd { color: var(--red); }
+.wk-day.today .wk-num { background: var(--red); color: #fff; font-weight: 600; }
+.wk-day.past { color: var(--label3); }
+.wk-total { font-size: 11px; color: var(--label2); font-variant-numeric: tabular-nums; }
+.wk-body { flex: 1; overflow-y: auto; scrollbar-gutter: stable; }
+.wk-grid { display: grid; position: relative; }
+.wk-axis { position: relative; }
+.wk-axis span { position: absolute; right: 6px; transform: translateY(-50%); font-size: 10px; color: var(--label2); white-space: nowrap; }
+/* 1時間ごとの実線と30分ごとの薄い線 */
+.wk-col {
+  position: relative; border-left: .5px solid var(--separator); cursor: pointer; min-width: 0; user-select: none; touch-action: none;
+  background:
+    repeating-linear-gradient(to bottom, var(--separator) 0 1px, transparent 1px var(--hour)),
+    repeating-linear-gradient(to bottom, transparent 0 calc(var(--hour) / 2), color-mix(in srgb, var(--separator) 45%, transparent) calc(var(--hour) / 2) calc(var(--hour) / 2 + 1px), transparent calc(var(--hour) / 2 + 1px) var(--hour));
+}
+.wk-col.past { background-color: color-mix(in srgb, var(--label) 3%, transparent); }
+.wk-col:hover { background-color: var(--fill); }
+.wk-ev {
+  position: absolute; margin: 0 2px; height: auto; padding: 2px 6px; border-radius: 4px; overflow: hidden;
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 0;
+  text-align: left; font-weight: 400; color: var(--label); line-height: 1.35;
+  background: color-mix(in srgb, var(--c) 22%, transparent); border-left: 3px solid var(--c);
+}
+.wk-ev:hover:not(:disabled) { background: color-mix(in srgb, var(--c) 34%, transparent); }
+.wk-ev:active:not(:disabled) { transform: none; }
+.wk-ev b { font-size: 12px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-ev span { font-size: 11px; color: var(--label2); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-ev .wk-memo { white-space: normal; }
+/* 過去は題名だけ、明日以降は時刻まで、今日はすべて */
+.wk-col.past .wk-ev span, .wk-col:not(.today):not(.tomorrow) .wk-ev .wk-memo { display: none; }
+.wk-col.past .wk-ev { opacity: .75; }
+.wk-col.today .wk-ev b { font-size: 13px; }
+/* ドラッグで作る予定の下書き */
+.wk-ev.ghost { --c: var(--blue); left: 0; right: 0; pointer-events: none; border: 1px dashed var(--blue); border-left-width: 3px; z-index: 3; }
+.wk-ev.ghost span { display: block !important; color: var(--label); font-weight: 600; }
+/* 現在時刻の線（今日の列は太く、丸を付ける） */
+.wk-now { position: absolute; left: 0; right: 0; height: 0; border-top: 1px solid color-mix(in srgb, var(--red) 45%, transparent); pointer-events: none; z-index: 2; }
+.wk-now.strong { border-top: 2px solid var(--red); }
+.wk-now.strong::before { content: ''; position: absolute; left: -6px; top: -7px; width: 12px; height: 12px; border-radius: 50%; background: var(--red); }
+/* 時刻の目盛りの上に今の時刻を出す（近くの目盛りは背景で隠す） */
+.wk-axis .wk-now-label { right: 2px; z-index: 3; padding: 1px 5px; border-radius: 4px; background: var(--red); color: #fff; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* 右クリックメニュー */
+.ctxmenu {
+  position: fixed; z-index: 100; min-width: 180px; padding: 4px; border-radius: 10px; background: var(--glass-strong);
+  display: flex; flex-direction: column;
+}
+.ctxmenu button { justify-content: flex-start; border-radius: 6px; height: 28px; padding: 0 12px; color: var(--label); font-weight: 400; }
+.ctxmenu button:hover:not(:disabled), .ctxmenu button:focus-visible { background: var(--blue); color: #fff; outline: 0; }
+.ctxmenu button.danger { color: var(--red); }
+.ctxmenu button.danger:hover, .ctxmenu button.danger:focus-visible { background: var(--red); color: #fff; }
+
+/* サイドバーの小さな月カレンダー */
+.mini { padding: 0 4px; }
+.mini-head { display: flex; align-items: center; gap: 2px; margin-bottom: 4px; font-weight: 600; }
+.mini-head span { flex: 1; padding-left: 4px; }
+.mini-grid { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; row-gap: 2px; }
+.mini-wd { font-size: 10px; color: var(--label2); line-height: 24px; font-weight: 600; }
+.mini-day { width: 28px; height: 28px; padding: 0; margin: auto; border-radius: 50%; font-size: 12px; font-weight: 400; color: var(--label); }
+.mini-day.sel { background: color-mix(in srgb, var(--blue) 18%, transparent); color: var(--blue); font-weight: 600; }
+.mini-day.today { background: var(--red); color: #fff; font-weight: 600; }
+
+/* 月間ダッシュボード */
+.kpis { display: flex; flex-wrap: wrap; gap: 24px; margin: 0 0 12px; color: var(--label2); }
+.kpis b { color: var(--label); font-size: 22px; font-weight: 600; letter-spacing: -.02em; margin-left: 4px; }
+.barcell { width: 40%; }
+.barcell i { display: inline-block; height: 8px; border-radius: 4px; vertical-align: middle; margin-right: 6px; }
+
+/* シート（予定のポップアップ） */
+dialog {
+  border-radius: 18px; padding: 22px; background: var(--glass-strong); color: var(--label);
+  width: min(500px, 92vw);
+}
+dialog::backdrop { background: rgb(0 0 0 / .18); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+dialog h2 { font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+dialog form { display: flex; flex-direction: column; gap: 14px; }
+dialog label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 500; color: var(--label2); }
+dialog input[name='title'] { font-size: 20px; font-weight: 600; }
+dialog .row label { flex: 1; }
+fieldset.weekdays { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+fieldset.weekdays legend { font-size: 12px; font-weight: 500; color: var(--label2); padding: 0; margin-bottom: 6px; }
+fieldset.weekdays small { color: var(--label2); font-size: 11px; }
+fieldset.weekdays .row label { flex: none; }
+dialog form > .row:last-child { gap: 4px; margin-top: 4px; } /* 削除2つ・キャンセル・保存を1行に収める */
+dialog form > .row:last-child button:not(.primary) { padding: 0 10px; }
+button.daily { height: 32px; background: var(--fill); color: var(--label); padding: 0 14px; }
+button.daily.on { background: var(--blue); color: #fff; box-shadow: 0 2px 8px color-mix(in srgb, var(--blue) 35%, transparent); }

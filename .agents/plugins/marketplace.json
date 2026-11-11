@@ -75,6 +75,20 @@
       "version": "1.0.2"
     },
     {
+      "name": "planner",
+      "description": "ユーザーと打ち合わせながら1日の予定（時間割）を組み、合意した予定を日次プランナー（12時間時計・週表示・振り返りの画面）に書き込む。メモ、TODO、議事録、Issue、走り書きなどのテキストを読んで「今日やり切ること」を提案し、時刻つきの予定に落とす。予定の追加・移動・削除・毎週の繰り返し、実績（振り返り）の記録、持ち越しの整理もここで行う。ユーザーが「今日何やる？」「予定入れて」「スケジュール組んで」「段取りを考えて」「明日の計画」「振り返りしたい」「このタスクを時間割にして」と言ったとき、または作業の優先順位や時間の割り振りに迷っているときは、planner と言われなくても使う。",
+      "source": {
+        "source": "local",
+        "path": "./plugins/planner"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity",
+      "version": "1.0.0"
+    },
+    {
       "name": "presenter",
       "description": "Skills: presentation-ja, presenter, presenter-setup",
       "source": {
@@ -100,7 +114,7 @@
         "authentication": "ON_INSTALL"
       },
       "category": "Productivity",
-      "version": "1.0.2"
+      "version": "1.0.3"
     },
     {
       "name": "usable-xlsm",
@@ -118,7 +132,7 @@
     },
     {
       "name": "nogikun",
-      "description": "Skills: arch-builder, aws-drawio-import, claat-creator, html-deck, pptx-design-system, presentation-ja, presenter, presenter-setup, reread, scribe, usable-xlsm",
+      "description": "Skills: arch-builder, aws-drawio-import, claat-creator, html-deck, planner, pptx-design-system, presentation-ja, presenter, presenter-setup, reread, scribe, usable-xlsm",
       "source": {
         "source": "local",
         "path": "./"
@@ -128,7 +142,7 @@
         "authentication": "ON_INSTALL"
       },
       "category": "Productivity",
-      "version": "1.0.9"
+      "version": "1.0.10"
     }
   ]
 }

@@ -1,0 +1,54 @@
+{
+  "rev": 1,
+  "store": {
+    "days": {
+      "2026-11-18": {
+        "date": "2026-11-18",
+        "rangeStart": 540,
+        "rangeEnd": 1080,
+        "status": "draft",
+        "activities": [
+          {
+            "id": "a9727b18-2443-4804-8b69-3a79d73361cd",
+            "order": 0,
+            "title": "設計",
+            "memo": "",
+            "planStart": 540,
+            "planEnd": 600,
+            "actualStart": null,
+            "actualEnd": null,
+            "status": ""
+          },
+          {
+            "id": "b05903d5-bd52-4a5f-8df3-81826987a9a0",
+            "order": 1,
+            "title": "レビュー",
+            "memo": "",
+            "planStart": 600,
+            "planEnd": 660,
+            "actualStart": null,
+            "actualEnd": null,
+            "status": ""
+          },
+          {
+            "id": "097b1001-38c4-4db9-b5fa-4fa6a4ffcb05",
+            "order": 2,
+            "title": "資料作成",
+            "memo": "",
+            "planStart": 660,
+            "planEnd": 720,
+            "actualStart": null,
+            "actualEnd": null,
+            "status": ""
+          }
+        ]
+      }
+    },
+    "rules": [],
+    "colors": {
+      "設計": 0,
+      "レビュー": 1,
+      "資料作成": 2
+    }
+  }
+}

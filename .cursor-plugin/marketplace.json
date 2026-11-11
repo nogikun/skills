@@ -39,6 +39,12 @@
       "version": "1.0.2"
     },
     {
+      "name": "planner",
+      "source": "./plugins/planner",
+      "description": "ユーザーと打ち合わせながら1日の予定（時間割）を組み、合意した予定を日次プランナー（12時間時計・週表示・振り返りの画面）に書き込む。メモ、TODO、議事録、Issue、走り書きなどのテキストを読んで「今日やり切ること」を提案し、時刻つきの予定に落とす。予定の追加・移動・削除・毎週の繰り返し、実績（振り返り）の記録、持ち越しの整理もここで行う。ユーザーが「今日何やる？」「予定入れて」「スケジュール組んで」「段取りを考えて」「明日の計画」「振り返りしたい」「このタスクを時間割にして」と言ったとき、または作業の優先順位や時間の割り振りに迷っているときは、planner と言われなくても使う。",
+      "version": "1.0.0"
+    },
+    {
       "name": "presenter",
       "source": "./plugins/presenter",
       "description": "Skills: presentation-ja, presenter, presenter-setup",
@@ -48,7 +54,7 @@
       "name": "scribe",
       "source": "./plugins/scribe",
       "description": "会議の動画・音声ファイル (mp4/mov/mkv/webm/mp3/m4a/wav/flac/ogg など、パスを渡すだけ) を話者分離つきで日本語文字起こしし、話者に名前を付けて議事録 (Markdown) や字幕 (WebVTT / SRT)、テキスト、JSON に書き出すスキル。同梱の Scribe CLI (NVIDIA Nemotron 3 Diarization + faster-whisper) を uv で実行する。「会議を文字起こしして」「この mp4/m4a/wav を書き起こして」「誰が何を話したか分けて」「議事録の元データを作って」「字幕 (vtt/srt) を作って」「話者の名前を付け直して」「さっきの議事録の話者名が違うので直して」「前回のジョブを書き出して」といった依頼では、ファイル形式や『Scribe』という名前が出ていなくても必ずこのスキルを使うこと。Zoom/Teams/Meet の録画、インタビュー、打ち合わせ音声の話者識別・話者分離の確認や、文字起こしジョブの再開・状態確認・一覧にも使う。",
-      "version": "1.0.2"
+      "version": "1.0.3"
     },
     {
       "name": "usable-xlsm",
@@ -59,8 +65,8 @@
     {
       "name": "nogikun",
       "source": "./",
-      "description": "Skills: arch-builder, aws-drawio-import, claat-creator, html-deck, pptx-design-system, presentation-ja, presenter, presenter-setup, reread, scribe, usable-xlsm",
-      "version": "1.0.9"
+      "description": "Skills: arch-builder, aws-drawio-import, claat-creator, html-deck, planner, pptx-design-system, presentation-ja, presenter, presenter-setup, reread, scribe, usable-xlsm",
+      "version": "1.0.10"
     }
   ]
 }

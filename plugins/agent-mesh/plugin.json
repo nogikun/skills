@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "agent-mesh",
+  "version": "1.0.0",
+  "description": "Delegate work between AI coding agents on this machine (Claude Code <-> Codex CLI) with the bundled `mesh` CLI, keep working while the other agent runs, and collect its result later. Use this whenever the user wants Claude Code and Codex/ChatGPT to talk to each other, asks to \"Codexに頼んで\", \"Claudeにレビューさせて\", \"別のエージェントに投げて\", \"相互通信\", \"agent-mesh\", \"mesh send\", wants a second opinion from the other agent, or wants to set up, start, check or stop the agent-mesh runtimes, even if they do not name the tool."
+}

@@ -1,0 +1,2 @@
+#!/bin/sh
+exec node --disable-warning=ExperimentalWarning "$(dirname "$(realpath "$0")")/../src/cli.ts" "$@"
